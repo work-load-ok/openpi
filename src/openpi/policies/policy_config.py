@@ -59,9 +59,19 @@ def create_trained_policy(
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure
         # that the policy is using the same normalization stats as the original training process.
+        # * If asset id is not provided or not found in the checkpoint directory, we will use an empty dictionary for norm stats.
+        # * When the norm stats are empty, the policy will not normalize the data.
+        # * This is to avoid errors when loading the policy.
         if data_config.asset_id is None:
-            raise ValueError("Asset id is required to load norm stats.")
-        norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets", data_config.asset_id)
+            # raise ValueError("Asset id is required to load norm stats.")
+            logging.warning("Asset id is required to load norm stats.")
+            norm_stats = {}
+        else:
+            try:
+                norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets", data_config.asset_id)
+            except FileNotFoundError:
+                norm_stats = {}
+                logging.warning(f"Norm stats not found in {checkpoint_dir / 'assets'}, skipping.")
 
     # Determine the device to use for PyTorch models
     if is_pytorch and pytorch_device is None:
@@ -71,7 +81,27 @@ def create_trained_policy(
             pytorch_device = "cuda" if torch.cuda.is_available() else "cpu"
         except ImportError:
             pytorch_device = "cpu"
-
+    # * When the norm stats are empty, the policy will not normalize the data.
+    # * This is to avoid errors when loading the policy.
+    if norm_stats is None or len(norm_stats) == 0:
+        return _policy.Policy(
+            model,
+            transforms=[
+                *repack_transforms.inputs,
+                transforms.InjectDefaultPrompt(default_prompt),
+                *data_config.data_transforms.inputs,
+                *data_config.model_transforms.inputs,
+            ],
+            output_transforms=[
+                *data_config.model_transforms.outputs,
+                *data_config.data_transforms.outputs,
+                *repack_transforms.outputs,
+            ],
+            sample_kwargs=sample_kwargs,
+            metadata=train_config.policy_metadata,
+            is_pytorch=is_pytorch,
+            pytorch_device=pytorch_device if is_pytorch else None,
+        )
     return _policy.Policy(
         model,
         transforms=[
