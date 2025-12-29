@@ -461,6 +461,81 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
             model_transforms=model_transforms,
         )
 
+@dataclasses.dataclass(frozen=True)
+class LerobotPikaDataConfig(DataConfigFactory):
+    """
+    Configuration for the Pika robot dataset.
+    This config handles the data transforms for the Pika robot's multi-camera setup and state/action space.
+    """
+
+    # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
+    use_delta_joint_actions: bool = True
+
+    # If provided, will be injected into the input data if the "prompt" key is not present.
+    default_prompt: str | None = None
+
+    # Repack transforms to match the dataset keys to the expected format
+    repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
+        default=_transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {
+                            "top_head": "observation.images.top_head",
+                            "hand_left": "observation.images.hand_left",
+                            "hand_right": "observation.images.hand_right",
+                        },
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+    )
+
+    # Action keys that will be used to read the action sequence from the dataset
+    action_sequence_keys: Sequence[str] = ("action",)
+
+    # mask state out (set to all zeros)
+    # mask_state: bool = False
+
+    # if convert to eef position
+    # convert_to_eef_position: bool = False
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        # Create data transforms for inputs and outputs
+        data_transforms = _transforms.Group(
+            inputs=[
+                pika_policy.PikaInputs(
+                    action_dim=model_config.action_dim,
+                    model_type=model_config.model_type,
+                    # mask_state=self.mask_state,
+                    # convert_to_eef_position=self.convert_to_eef_position,
+                )
+            ],
+            outputs=[pika_policy.PikaOutputs()],
+        )
+
+        # Apply delta action transform if enabled
+        if self.use_delta_joint_actions:
+            # Assuming first 13 dimensions are joints and last dimension is gripper
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)  # index 6, 13 is gripper
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
+        # Create model transforms
+        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=self.repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=self.action_sequence_keys,
+        )
 
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
@@ -514,6 +589,25 @@ class TrainConfig:
     log_interval: int = 100
     # How often (in steps) to save checkpoints.
     save_interval: int = 1000
+    
+#***************************************************
+    is_train: bool = True  # * Only use partial data in training
+    
+    # split:    str  = None  # one of ['train_tasks', 'val_tasks', 'heldout_tasks']
+    # * Bugfix, only use train_tasks for training
+    split: str = 'train_tasks'  # * Only use training tasks for training
+
+    n_history: int = 0  # Number of history frames to use. If 0, no history will be used.
+    with_episode_start: bool = False  # If true, will use the episode start frame as the first frame in the history.
+    skip_sample_ratio_within_episode: float = 0.
+    # p_video_rewind: float = 0.
+    timestep_difference_mode: bool = False
+    stage_process_mode: bool = False
+    drop_last: bool = True  # If true, will drop the last incomplete batch.
+    
+
+    skip_norm_stats: bool = False
+#***************************************************
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = 5000
 
