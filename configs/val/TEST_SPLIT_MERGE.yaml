@@ -15,7 +15,6 @@ model:
   p_mask_ego_state: 1.0
   timestep_difference_mode: false
   discrete_state_input: false  # Not using states into prompt
-  download_path: /cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model
 
 # Data configuration
 data:
@@ -30,6 +29,8 @@ data:
   repack_transforms:
     _target_: Group
     inputs:
+      - _target_: openpi.policies.droid_policy.DroidInputs
+        model_type: ModelType.PI0 
       - _target_: RepackTransform
         structure:
           images:
@@ -41,7 +42,6 @@ data:
           frame_index: frame_index
           progress_gt: progress_gt
           stage_progress_gt: stage_progress_gt
-          progress: progress  # Required for training, not for inference
 
 # Weight loader - pretrained weights
 pytorch_weight_path: /cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/
