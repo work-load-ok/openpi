@@ -124,7 +124,7 @@ def set_seed(seed: int, local_rank: int):
 
 def build_datasets(config: _config.TrainConfig):
     # Use the unified data loader with PyTorch framework
-    data_loader = _data.create_data_loader(config, framework="pytorch", shuffle=True)
+    data_loader = _data.create_data_loader(config, framework="pytorch", shuffle=True, skip_norm_stats=config.skip_norm_stats)
     return data_loader, data_loader.data_config()
 
 
@@ -361,7 +361,7 @@ def train_loop(config: _config.TrainConfig):
     # Log sample images to wandb on first batch
     if is_main and config.wandb_enabled and not resuming:
         # Create a separate data loader for sample batch to avoid consuming the main loader
-        sample_data_loader = _data.create_data_loader(config, framework="pytorch", shuffle=False)
+        sample_data_loader = _data.create_data_loader(config, framework="pytorch", shuffle=False, skip_norm_stats=config.skip_norm_stats)
         sample_batch = next(iter(sample_data_loader))
         # Convert observation and actions to torch tensors
         observation, actions = sample_batch
@@ -627,6 +627,46 @@ def main():
     config = _config.cli()
     train_loop(config)
 
+from openpi.training import config_loader
+import tyro
+import sys
+
+
+def main_custom():
+    """Load config from YAML file and allow command-line overrides.
+    
+    Usage:
+        python scripts/train_pytorch.py ./configs/train/TEST_SPLIT_MERGE.yaml --exp_name test --overwrite
+    """
+    init_logging()
+    
+    # Find the YAML file path from command line arguments
+    yaml_path = None
+    remaining_args = []
+    
+    for arg in sys.argv[1:]:
+        if yaml_path is None and arg.endswith('.yaml') and not arg.startswith('-'):
+            yaml_path = arg
+        else:
+            remaining_args.append(arg)
+    
+    if yaml_path is None:
+        raise ValueError(
+            "Please provide a YAML config file path as the first argument.\n"
+            "Usage: python scripts/train_pytorch.py ./configs/train/YOUR_CONFIG.yaml [--exp_name NAME] [--overwrite]"
+        )
+    
+    # Load the config from YAML file
+    base_config = config_loader.load_config(yaml_path)
+    logging.info(f"Loaded config from {yaml_path}")
+    
+    # Apply remaining_args as overrides to base_config using tyro
+    # Replace sys.argv to only include the remaining arguments
+    sys.argv = [sys.argv[0], base_config.name] + remaining_args
+    config = tyro.extras.overridable_config_cli({base_config.name: (base_config.name, base_config)})
+    
+    train_loop(config)
+
 
 if __name__ == "__main__":
-    main()
+    main_custom()
