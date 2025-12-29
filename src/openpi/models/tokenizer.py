@@ -12,10 +12,10 @@ import openpi.shared.download as download
 
 
 class PaligemmaTokenizer:
-    def __init__(self, max_len: int = 48):
+    def __init__(self, max_len: int = 48, download_path: str = "gs://big_vision/paligemma_tokenizer.model"):
         self._max_len = max_len
 
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        path = download.maybe_download(download_path, gs={"token": "anon"})
         with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
@@ -49,11 +49,12 @@ class PaligemmaTokenizer:
 
 
 class FASTTokenizer:
-    def __init__(self, max_len: int = 256, fast_tokenizer_path: str = "physical-intelligence/fast"):
+    def __init__(self, max_len: int = 256, fast_tokenizer_path: str = "physical-intelligence/fast", 
+                download_path: str = "gs://big_vision/paligemma_tokenizer.model"):
         self._max_len = max_len
 
         # Download base PaliGemma tokenizer
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        path = download.maybe_download(download_path, gs={"token": "anon"})
         with path.open("rb") as f:
             self._paligemma_tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
@@ -150,12 +151,12 @@ class BinningTokenizer:
     Standard RT-2 / OpenVLA style binning tokenizer.
     """
 
-    def __init__(self, max_len: int = 256, n_bins: int = 256):
+    def __init__(self, max_len: int = 256, n_bins: int = 256, download_path: str = "gs://big_vision/paligemma_tokenizer.model"):
         self._max_len = max_len
         self._n_bins = n_bins
 
         # Download base PaliGemma tokenizer
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        path = download.maybe_download(download_path, gs={"token": "anon"})
         with path.open("rb") as f:
             self._paligemma_tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
@@ -248,7 +249,7 @@ class FSQTokenizer:
     FSQ tokenizer from the FAST paper baselines.
     """
 
-    def __init__(self, max_len: int = 256, fsq_tokenizer_path: str | None = None):
+    def __init__(self, max_len: int = 256, fsq_tokenizer_path: str | None = None, download_path: str = "gs://big_vision/paligemma_tokenizer.model"):
         self._max_len = max_len
 
         assert fsq_tokenizer_path is not None, "fsq_tokenizer_path must be provided"
@@ -291,7 +292,7 @@ class FSQTokenizer:
         )
 
         # Download base PaliGemma tokenizer
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        path = download.maybe_download(download_path, gs={"token": "anon"})
         with path.open("rb") as f:
             self._paligemma_tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
