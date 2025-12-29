@@ -31,6 +31,7 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+    download_path: str = "gs://big_vision/paligemma_tokenizer.model"
 
     def __post_init__(self):
         if self.max_token_len is None:
@@ -109,35 +110,26 @@ class Pi0Config(_model.BaseModelConfig):
 
 
 @dataclasses.dataclass(frozen=True)
-class Pi0Config_Custom(_model.BaseModelConfig):
-    dtype: str = "bfloat16"
-    paligemma_variant: _gemma.Variant = "gemma_2b"
-    action_expert_variant: _gemma.Variant = "gemma_300m"
+class Pi0Config_Custom(Pi0Config):
+    # dtype: str = "bfloat16"
+    # paligemma_variant: _gemma.Variant = "gemma_2b"
+    # action_expert_variant: _gemma.Variant = "gemma_300m"
 
-    # Set the model specific defaults.
-    action_dim: int = 32
-    action_horizon: int = 50
+    # # Set the model specific defaults.
+    # action_dim: int = 32
+    # action_horizon: int = 50
     
-    # max_token_len: int = 48
-    max_token_len: int = None  # type: ignore
-    # Pi05 has two differences from Pi0:
-    # - the state input is part of the discrete language tokens rather than a continuous input that is part of the suffix
-    # - the action expert uses adaRMSNorm to inject the flow matching timestep
-    pi05: bool = False
-    # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
-    discrete_state_input: bool = None  # type: ignore
+    # # max_token_len: int = 48
+    # max_token_len: int = None  # type: ignore
+    # # Pi05 has two differences from Pi0:
+    # # - the state input is part of the discrete language tokens rather than a continuous input that is part of the suffix
+    # # - the action expert uses adaRMSNorm to inject the flow matching timestep
+    # pi05: bool = False
+    # # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
+    # discrete_state_input: bool = None  # type: ignore
 
     timestep_difference_mode: bool = False  # * If true, the frame_index input represents the difference between two timesteps.
     stage_process_mode: bool = False
-
-    def __post_init__(self):
-        if self.max_token_len is None:
-            object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
-        if self.discrete_state_input is None:
-            object.__setattr__(self, "discrete_state_input", self.pi05)  # * discrete_state_input is equal to self.pi05
-            # * self.pi05 with discrete_state_input
-            # * self.pi0, no discrete_state_input
-
 
     # * Custom
     with_value_head: bool = False
@@ -148,6 +140,14 @@ class Pi0Config_Custom(_model.BaseModelConfig):
     p_mask_ego_state: float = 0.0
     cfg_scale: float = 1.0
 
+    def __post_init__(self):
+        if self.max_token_len is None:
+            object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
+        if self.discrete_state_input is None:
+            object.__setattr__(self, "discrete_state_input", self.pi05)  # * discrete_state_input is equal to self.pi05
+            # * self.pi05 with discrete_state_input
+            # * self.pi0, no discrete_state_input
+
     @property
     @override
     def model_type(self) -> _model.ModelType:
@@ -157,7 +157,7 @@ class Pi0Config_Custom(_model.BaseModelConfig):
 
     @override
     def create(self, rng: at.KeyArrayLike) -> "Pi0":
-        from openpi_value.models.pi0 import Pi0
+        from openpi.models.pi0 import Pi0
         return Pi0(self, rngs=nnx.Rngs(rng))
 
     @override
