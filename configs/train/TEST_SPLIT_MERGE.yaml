@@ -1,0 +1,64 @@
+# TEST_SPLIT_MERGE Config
+# Value head training config for Pika dataset
+
+_target_: TrainConfig
+name: TEST_SPLIT_MERGE
+
+# Model configuration
+model:
+  _target_: Pi0Config_Custom
+  pi05: true
+  with_value_head: true
+  loss_value_weight: 1.0
+  loss_value_use_bce: false
+  loss_action_weight: 0.0  # No action loss
+  p_mask_ego_state: 1.0
+  timestep_difference_mode: false
+  discrete_state_input: false  # Not using states into prompt
+
+# Data configuration
+data:
+  _target_: LerobotPikaDataConfig
+  repo_id: /cpfs01/shared/baidx/processed_cv2/
+  assets:
+    _target_: AssetsConfig
+    assets_dir: /cpfs01/shared/baidx/
+    asset_id: processed_cv2
+  default_prompt: Flatten the cloth.
+  # Repack transforms for image/state/action mapping
+  repack_transforms:
+    _target_: Group
+    inputs:
+      - _target_: openpi.policies.droid_policy.DroidInputs
+        model_type: ModelType.PI0 
+      - _target_: RepackTransform
+        structure:
+          images:
+            top_head: observation.images.top_head
+            hand_left: observation.images.hand_left
+            hand_right: observation.images.hand_right
+          state: observation.state
+          actions: action
+          frame_index: frame_index
+          progress_gt: progress_gt
+          stage_progress_gt: stage_progress_gt
+          progress: progress  # Required for training, not for inference
+
+# Weight loader - pretrained weights
+pytorch_weight_path: /cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/
+
+# Training hyperparameters
+num_train_steps: 100000
+keep_period: 10000
+save_interval: 10000
+
+# Data loading
+num_workers: 8
+batch_size: 16  # For 1 GPU, use 128 for 8 GPUs
+
+# Training modes
+with_episode_start: false
+timestep_difference_mode: false
+stage_process_mode: false
+skip_norm_stats: true  # No norm stats used
+

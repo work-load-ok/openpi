@@ -1,0 +1,38 @@
+# Pi0 Libero LoRA Fine-tuning Config (Low Memory)
+# This config demonstrates LoRA fine-tuning for reduced memory usage
+
+_target_: TrainConfig
+name: pi0_libero_low_mem_finetune
+
+# Model configuration - Pi0 with LoRA variants for low-memory training
+model:
+  _target_: Pi0Config
+  paligemma_variant: gemma_2b_lora
+  action_expert_variant: gemma_300m_lora
+
+# Data configuration for Libero dataset
+data:
+  _target_: LeRobotLiberoDataConfig
+  repo_id: physical-intelligence/libero
+  base_config:
+    _target_: DataConfig
+    prompt_from_task: true
+  extra_delta_transform: true
+
+# Weight loader - load from base Pi0 checkpoint
+weight_loader:
+  _target_: CheckpointWeightLoader
+  params_path: gs://openpi-assets/checkpoints/pi0_base/params
+
+# Training hyperparameters
+num_train_steps: 30000
+
+# Turn off EMA for LoRA finetuning
+ema_decay: null
+
+# Note: freeze_filter needs to be set programmatically using:
+# freeze_filter=pi0_config.Pi0Config(
+#     paligemma_variant="gemma_2b_lora",
+#     action_expert_variant="gemma_300m_lora"
+# ).get_freeze_filter()
+

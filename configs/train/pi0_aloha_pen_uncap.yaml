@@ -1,0 +1,31 @@
+# Pi0 ALOHA Pen Uncap Fine-tuning Config
+# Example of fine-tuning on a custom LeRobot ALOHA dataset
+
+_target_: TrainConfig
+name: pi0_aloha_pen_uncap
+
+# Model configuration
+model:
+  _target_: Pi0Config
+
+# Data configuration for custom ALOHA dataset
+data:
+  _target_: LeRobotAlohaDataConfig
+  repo_id: physical-intelligence/aloha_pen_uncap_diverse
+  assets:
+    _target_: AssetsConfig
+    assets_dir: gs://openpi-assets/checkpoints/pi0_base/assets
+    asset_id: trossen
+  default_prompt: uncap the pen
+  # Custom repack transforms for this dataset's image keys
+  # Note: Complex transforms like this are better defined in Python code
+  # For simple cases, you can define them here
+
+# Weight loader
+weight_loader:
+  _target_: CheckpointWeightLoader
+  params_path: gs://openpi-assets/checkpoints/pi0_base/params
+
+# Training hyperparameters
+num_train_steps: 20000
+
