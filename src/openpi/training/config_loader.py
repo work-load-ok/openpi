@@ -26,12 +26,13 @@ subclasses of specified base classes.
 """
 
 import dataclasses
+import enum
 import importlib
 import inspect
 import logging
 import pathlib
 import pkgutil
-from typing import Any, TypeVar
+from typing import Any, TypeVar, get_type_hints, get_origin, get_args, Union
 
 import yaml
 
@@ -222,6 +223,118 @@ def _is_instantiatable(obj: Any) -> bool:
     return isinstance(obj, dict) and "_target_" in obj
 
 
+def _unwrap_type(type_hint: Any) -> Any:
+    """Unwrap type hints to get the base type.
+    
+    Handles tyro.conf.Suppress[T], Optional[T], Annotated[T, ...], etc.
+    
+    Args:
+        type_hint: A type hint that may be wrapped
+        
+    Returns:
+        The unwrapped base type
+    """
+    origin = get_origin(type_hint)
+    
+    # Handle Optional[T] (which is Union[T, None])
+    if origin is Union:
+        args = get_args(type_hint)
+        # Filter out None type
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        if len(non_none_args) == 1:
+            return _unwrap_type(non_none_args[0])
+        return type_hint
+    
+    # Handle Annotated[T, ...] (which includes tyro.conf.Suppress[T])
+    if hasattr(type_hint, "__origin__") and hasattr(type_hint, "__metadata__"):
+        # This is an Annotated type
+        args = get_args(type_hint)
+        if args:
+            return _unwrap_type(args[0])
+    
+    return type_hint
+
+
+def _resolve_enum_value(value: str, enum_class: type) -> Any:
+    """Resolve a string to an enum value.
+    
+    Handles formats like:
+    - "VALUE" -> EnumClass.VALUE
+    - "EnumClass.VALUE" -> EnumClass.VALUE
+    
+    Args:
+        value: String representation of the enum value
+        enum_class: The enum class to resolve to
+        
+    Returns:
+        The resolved enum value
+        
+    Raises:
+        ValueError: If the value cannot be resolved
+    """
+    if not isinstance(value, str):
+        return value
+    
+    # Handle "EnumClass.VALUE" format
+    if "." in value:
+        parts = value.split(".")
+        enum_name = parts[-1]
+    else:
+        enum_name = value
+    
+    # Try to find the enum value
+    try:
+        return enum_class[enum_name]
+    except KeyError:
+        # Try case-insensitive match
+        for member in enum_class:
+            if member.name.upper() == enum_name.upper():
+                return member
+        raise ValueError(f"Cannot resolve '{value}' to {enum_class.__name__}. "
+                        f"Valid values: {[m.name for m in enum_class]}")
+
+
+def _convert_value_to_type(value: Any, type_hint: Any) -> Any:
+    """Convert a value to match the expected type hint.
+    
+    Args:
+        value: The value to convert
+        type_hint: The expected type
+        
+    Returns:
+        The converted value
+    """
+    if value is None:
+        return None
+    
+    # Unwrap the type first
+    base_type = _unwrap_type(type_hint)
+    
+    # Handle enum types
+    if isinstance(base_type, type) and issubclass(base_type, enum.Enum):
+        return _resolve_enum_value(value, base_type)
+    
+    return value
+
+
+def _get_field_types(cls: type) -> dict[str, Any]:
+    """Get type hints for a class's fields, handling dataclasses.
+    
+    Args:
+        cls: The class to get field types for
+        
+    Returns:
+        Dictionary mapping field names to their type hints
+    """
+    try:
+        return get_type_hints(cls)
+    except Exception:
+        # Fallback for classes where get_type_hints fails
+        if dataclasses.is_dataclass(cls):
+            return {f.name: f.type for f in dataclasses.fields(cls)}
+        return {}
+
+
 def _instantiate_recursive(config: Any) -> Any:
     """Recursively instantiate objects from config dicts.
     
@@ -236,10 +349,22 @@ def _instantiate_recursive(config: Any) -> Any:
         target = config.pop("_target_")
         cls = get_class(target)
         
+        # Get type hints for the class fields
+        field_types = _get_field_types(cls)
+        
         # Recursively process all arguments
         processed_args = {}
         for key, value in config.items():
-            processed_args[key] = _instantiate_recursive(value)
+            processed_value = _instantiate_recursive(value)
+            
+            # Try to convert the value to match the expected type
+            if key in field_types:
+                try:
+                    processed_value = _convert_value_to_type(processed_value, field_types[key])
+                except Exception as e:
+                    logger.warning(f"Could not convert field '{key}' for {cls.__name__}: {e}")
+            
+            processed_args[key] = processed_value
         
         # Handle special cases for callable fields (like lambdas)
         if "_callable_" in processed_args:
@@ -526,7 +651,12 @@ def register_default_classes() -> None:
     register_class("RepackTransform", "openpi.transforms.RepackTransform")
     register_class("RLDSDataset", "openpi.training.droid_rlds_dataset.RLDSDataset")
 
-register_default_classes()
+# NOTE: Do NOT call register_default_classes() at module load time!
+# This causes issues with tyro CLI parsing because it triggers imports
+# and class registrations before tyro can properly analyze the type hints.
+# Call register_default_classes() explicitly when needed for YAML loading.
+
+# register_default_classes()  # Disabled to avoid conflicts with tyro
 
 # def register_default_classes_lazy() -> None:
 #     """Lazily register default classes using string paths (no imports).
