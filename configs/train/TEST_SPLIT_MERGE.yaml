@@ -41,7 +41,7 @@ data:
           frame_index: frame_index
           progress_gt: progress_gt
           stage_progress_gt: stage_progress_gt
-          progress: progress  # Required for training, not for inference
+          # progress: progress  # Required for training, not for inference
 
 # Weight loader - pretrained weights
 pytorch_weight_path: /cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/
