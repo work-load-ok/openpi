@@ -559,6 +559,11 @@ class TrainConfig:
     # Optional path to a PyTorch checkpoint to load weights from.
     pytorch_weight_path: str | None = None
 
+    # PyTorch model class name for dynamic model instantiation.
+    # Available options: "PI0Pytorch", "PI0Pytorch_Custom", or custom model class names.
+    # The model class must be registered in the model registry.
+    pytorch_model_class: str = "PI0Pytorch"
+
     # Precision for PyTorch training.
     pytorch_training_precision: Literal["bfloat16", "float32"] = "bfloat16"
 

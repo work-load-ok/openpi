@@ -15,6 +15,7 @@ import openpi.models.model as _model
 import openpi.training.config as _config
 from openpi.training.droid_rlds_dataset import DroidRldsDataset
 import openpi.transforms as _transforms
+from sklearn.model_selection import train_test_split
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -150,6 +151,27 @@ def create_torch_dataset(
 
     return dataset
 
+
+
+# 根据任务，按比例划分数据集
+def episodes_split_through_task(repo_id: str, split_ratio: float = 0.9, split_type: str = "train", random_seed: int = 42) -> list[int]:
+    """Split the episodes by task."""
+    assert split_type in ['all', "train", "val"], f"Invalid split type '{split_type}'. Must be 'all', 'train' or 'val'."
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+    episodes_meta = dataset_meta.episodes
+    episodes_index = [key for key in episodes_meta.keys()]
+    tasks = [episodes_meta[idx]["tasks"] for idx in episodes_index]
+    if split_type == "all":
+        return episodes_index
+    else:
+        train_episodes, val_episodes = train_test_split(episodes_index, 
+                                                        test_size=1-split_ratio, 
+                                                        random_state=random_seed,
+                                                        stratify=tasks)
+        if split_type == "train":
+            return train_episodes
+        else:
+            return val_episodes
 
 def create_rlds_dataset(
     data_config: _config.DataConfig,

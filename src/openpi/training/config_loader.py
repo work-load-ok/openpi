@@ -130,6 +130,9 @@ def _find_subclass_in_modules(
             "openpi.training.optimizer",
             "openpi.transforms",
             "openpi.training.droid_rlds_dataset",
+            "openpi.models_pytorch.pi0_pytorch",
+            "openpi.models_pytorch.model_registry",
+            "openpi.training.custom_config",
         ]
     
     for module_path in search_modules:
@@ -559,6 +562,9 @@ def auto_register_subclasses(
             "openpi.training.optimizer",
             "openpi.transforms",
             "openpi.training.droid_rlds_dataset",
+            "openpi.models_pytorch.pi0_pytorch",
+            "openpi.models_pytorch.model_registry",
+            "openpi.training.custom_config",
         ]
     
     registered = []
@@ -618,6 +624,7 @@ def register_default_classes() -> None:
     1. Core classes (TrainConfig, DataConfig, AssetsConfig)
     2. Base classes for auto-discovery
     3. Common model, data, optimizer, and transform classes
+    4. PyTorch model classes for dynamic instantiation
     """
     # Import base classes for registration
     from openpi.training.config import (
@@ -650,6 +657,15 @@ def register_default_classes() -> None:
     register_class("Group", "openpi.transforms.Group")
     register_class("RepackTransform", "openpi.transforms.RepackTransform")
     register_class("RLDSDataset", "openpi.training.droid_rlds_dataset.RLDSDataset")
+    
+    # Register PyTorch model classes for YAML config instantiation
+    # Note: The actual model registry is in openpi.models_pytorch.model_registry
+    register_class("PI0Pytorch", "openpi.models_pytorch.pi0_pytorch.PI0Pytorch")
+    register_class("PI0Pytorch_Custom", "openpi.models_pytorch.pi0_pytorch.PI0Pytorch_Custom")
+    
+    # Register model registry utilities
+    register_class("create_pytorch_model", "openpi.models_pytorch.model_registry.create_pytorch_model")
+    register_class("register_pytorch_model", "openpi.models_pytorch.model_registry.register_pytorch_model")
 
 # NOTE: Do NOT call register_default_classes() at module load time!
 # This causes issues with tyro CLI parsing because it triggers imports
