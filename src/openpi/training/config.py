@@ -41,6 +41,7 @@ class AssetsConfig:
 
     These assets will be replicated inside the checkpoint under the `assets/asset_id` directory.
 
+    You can load the norm stats from the assert directory.
     This can be used to load assets from a different checkpoint (e.g., base model checkpoint) or some other
     centralized location. For example, to load the norm stats for the Trossen robot from the base model checkpoint
     during fine-tuning, use:
