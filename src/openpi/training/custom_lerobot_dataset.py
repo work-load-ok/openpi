@@ -299,7 +299,7 @@ class CustomLeRobotDataset(LeRobotDataset):
             item_sequence.insert(-1, his_item.copy())  # Note the inserting position
         return N_HISTORY, item_sequence
 
-class CustomMultiLeRobotDataset(torch.utils.data.Dataset, MultiLeRobotDataset):
+class CustomMultiLeRobotDataset(MultiLeRobotDataset,torch.utils.data.Dataset):
     """A dataset consisting of multiple underlying `CustomLeRobotDataset`s.
 
     The underlying `CustomLeRobotDataset`s are effectively concatenated, and this class adopts much of the API
@@ -352,11 +352,33 @@ class CustomMultiLeRobotDataset(torch.utils.data.Dataset, MultiLeRobotDataset):
             )
         for repo_id, ds in zip(self.repo_ids, self._datasets, strict=True):
             extra_keys = set(ds.features).difference(intersection_features)
-            logging.warning(
-                f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the "
-                "other datasets."
-            )
-            self.disabled_features.update(extra_keys)
+            if len(extra_keys) > 0:
+                logging.warning(
+                    f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the "
+                    "other datasets."
+                )
+                self.disabled_features.update(extra_keys)
         
         self.image_transforms = image_transforms
         self.delta_timestamps = delta_timestamps
+
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        if idx >= len(self):
+            raise IndexError(f"Index {idx} out of bounds.")
+        # Determine which dataset to get an item from based on the index.
+        start_idx = 0
+        dataset_idx = 0
+        for data_index, dataset in enumerate(self._datasets):
+            if idx >= start_idx + dataset.num_frames:
+                start_idx += dataset.num_frames
+                dataset_idx += 1
+                continue
+            break
+        else:
+            raise AssertionError("We expect the loop to break out as long as the index is within bounds.")
+        item = self._datasets[dataset_idx][idx - start_idx]
+        item["dataset_index"] = torch.tensor(dataset_idx)
+        for data_key in self.disabled_features:
+            if data_key in item:
+                del item[data_key]
+        return item
