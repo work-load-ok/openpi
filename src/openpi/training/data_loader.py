@@ -16,6 +16,7 @@ import openpi.training.config as _config
 from openpi.training.droid_rlds_dataset import DroidRldsDataset
 import openpi.transforms as _transforms
 from sklearn.model_selection import train_test_split
+from openpi.training.custom_lerobot_dataset import CustomMultiLeRobotDataset, CustomLeRobotDataset
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -58,6 +59,22 @@ class TransformedDataset(Dataset[T_co]):
 
     def __getitem__(self, index: SupportsIndex) -> T_co:
         return self._transform(self._dataset[index])
+
+    def __len__(self) -> int:
+        return len(self._dataset)
+
+class CustomTransformedMultiDataset(TransformedDataset):
+    """
+    A transformed dataset that applies different transforms to different datasets.
+    """
+    def __init__(self, dataset: Dataset, transforms: list[Sequence[_transforms.DataTransformFn]]):
+        super().__init__(dataset, transforms)
+        self._transforms = [_transforms.compose(transform) for transform in transforms]
+        self._num_datasets = np.cumsum([len(data) for data in dataset._datasets])
+
+    def __getitem__(self, index: SupportsIndex) -> T_co:
+        dataset_index = np.where(self._num_datasets > index)[0][0]
+        return self._transforms[dataset_index](self._dataset[index])
 
     def __len__(self) -> int:
         return len(self._dataset)
@@ -129,45 +146,104 @@ class FakeDataset(Dataset):
 
 
 def create_torch_dataset(
-    data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig
+    data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig, config: _config.TrainConfig = None
 ) -> Dataset:
     """Create a dataset for training."""
-    repo_id = data_config.repo_id
-    if repo_id is None:
-        raise ValueError("Repo ID is not set. Cannot create dataset.")
-    if repo_id == "fake":
-        return FakeDataset(model_config, num_samples=1024)
+    # 自定义参数，如果config不为空，则使用config中额外定义的参数进行数据处理
+    if config is not None:
+        split= config.split
+        data_kwargs = dict(
+            n_history=config.n_history,
+            with_episode_start=config.with_episode_start,
+            skip_sample_ratio_within_episode=config.skip_sample_ratio_within_episode,
+            timestep_difference_mode=config.timestep_difference_mode,
+            stage_process_mode=config.stage_process_mode,
+        )
+    else:
+        data_kwargs = {}
+        split = 'all'
 
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
-    dataset = lerobot_dataset.LeRobotDataset(
-        data_config.repo_id,
-        delta_timestamps={
+    repo_ids = data_config.repo_id
+    if repo_ids is None:
+        raise ValueError("Repo ID is not set. Cannot create dataset.")
+    if repo_ids == "fake":
+        return FakeDataset(model_config, num_samples=1024)
+    
+    # 增加从给定目录下读取多个数据集的功能
+    if isinstance(repo_ids, str):
+        if not os.path.isdir(repo_ids):
+            raise ValueError(f"Directory {repo_ids} does not exist.")
+        sub_required_dirs = {'meta','data','videos'}
+        subs = {d for d in os.listdir(repo_ids) if os.path.isdir(os.path.join(repo_ids, d))}
+        if not sub_required_dirs.issubset(subs): # 检查是否为lerobot数据结构，如果不是，则为多个lerobot数据集的父目录
+            repo_ids = [os.path.join(repo_ids, d) for d in subs]
+
+    if isinstance(repo_ids, str):
+        dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_ids)
+        dataset = CustomLeRobotDataset(
+            repo_id=repo_ids,
+            episodes=episodes_split_through_task(repo_ids, split_type=split, shuffle=False),
+            delta_timestamps={
+                key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
+            },
+            video_backend='pyav',
+            **data_kwargs,
+        )
+    elif isinstance(repo_ids, list):
+        repo_to_episodes = {
+            repo_id: episodes_split_through_task(repo_id, split_type=split, shuffle=False) for repo_id in repo_ids
+        }
+        dataset_meta_list = [lerobot_dataset.LeRobotDatasetMetadata(repo_id) for repo_id in repo_ids]
+        all_delta_timestamps =[{
             key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-        },
-    )
+            } for dataset_meta in dataset_meta_list]
+        dataset = CustomMultiLeRobotDataset(
+            repo_ids=repo_ids,
+            episodes=repo_to_episodes,
+            delta_timestamps=all_delta_timestamps,
+            video_backend='pyav',
+            **data_kwargs,
+        )
+    else:
+        raise ValueError(f"Invalid repo_id: {repo_ids}, must be a string or a list of strings.")
 
     if data_config.prompt_from_task:
-        dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
+        if isinstance(repo_ids, str):
+            # dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_ids)
+            dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
+        elif isinstance(repo_ids, list):
+            all_tasks = [dataset_meta.tasks for dataset_meta in dataset_meta_list]
+        dataset = CustomTransformedMultiDataset(dataset, [[_transforms.PromptFromLeRobotTask(tasks)] for tasks in all_tasks])
 
     return dataset
 
 
 
 # 根据任务，按比例划分数据集
-def episodes_split_through_task(repo_id: str, split_ratio: float = 0.9, split_type: str = "train", random_seed: int = 42) -> list[int]:
+def episodes_split_through_task(repo_id: str, split_ratio: float = 0.9, split_type: str = "train", shuffle: bool = False, random_seed: int = 42) -> list[int]:
     """Split the episodes by task."""
     assert split_type in ['all', "train", "val"], f"Invalid split type '{split_type}'. Must be 'all', 'train' or 'val'."
     dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
     episodes_meta = dataset_meta.episodes
     episodes_index = [key for key in episodes_meta.keys()]
-    tasks = [episodes_meta[idx]["tasks"] for idx in episodes_index]
+    # tasks = [episodes_meta[idx]["tasks"] for idx in episodes_index]
     if split_type == "all":
         return episodes_index
     else:
-        train_episodes, val_episodes = train_test_split(episodes_index, 
-                                                        test_size=1-split_ratio, 
-                                                        random_state=random_seed,
-                                                        stratify=tasks)
+        episodes_index_dict = {}
+        for idx in episodes_index:
+            task = episodes_meta[idx]["tasks"]
+            task = ''.join(task)
+            if task not in episodes_index_dict.keys():
+                episodes_index_dict[task] = []
+            episodes_index_dict[task].append(idx)
+        train_episodes = []
+        val_episodes = []
+        for task in episodes_index_dict.keys():
+            length = len(episodes_index_dict[task])
+            train_length = int(length * split_ratio)
+            train_episodes.extend(episodes_index_dict[task][:train_length])
+            val_episodes.extend(episodes_index_dict[task][train_length:])
         if split_type == "train":
             return train_episodes
         else:
@@ -287,6 +363,7 @@ def create_data_loader(
         seed=config.seed,
         skip_norm_stats=skip_norm_stats,
         framework=framework,
+        config=config,
     )
 
 
@@ -303,6 +380,7 @@ def create_torch_data_loader(
     num_workers: int = 0,
     seed: int = 0,
     framework: str = "jax",
+    config: _config.TrainConfig = None,
 ) -> DataLoader[tuple[_model.Observation, _model.Actions]]:
     """Create a data loader for training.
 
@@ -321,7 +399,7 @@ def create_torch_data_loader(
             execute in the main process.
         seed: The seed to use for shuffling the data.
     """
-    dataset = create_torch_dataset(data_config, action_horizon, model_config)
+    dataset = create_torch_dataset(data_config, action_horizon, model_config, config=config)
     dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)
 
     # Use TorchDataLoader for both frameworks
