@@ -12,6 +12,9 @@ from openpi.models import tokenizer as _tokenizer
 from openpi.shared import array_typing as at
 from openpi.shared import normalize as _normalize
 
+import torch
+import copy
+
 DataDict: TypeAlias = at.PyTree
 NormStats: TypeAlias = _normalize.NormStats
 
@@ -244,6 +247,28 @@ class AbsoluteActions(DataTransformFn):
         return data
 
 
+# @dataclasses.dataclass(frozen=True)
+# class TokenizePrompt(DataTransformFn):
+#     tokenizer: _tokenizer.PaligemmaTokenizer
+#     discrete_state_input: bool = False
+
+#     def __call__(self, data: DataDict) -> DataDict:
+#         if (prompt := data.pop("prompt", None)) is None:
+#             raise ValueError("Prompt is required")
+
+#         if self.discrete_state_input:
+#             if (state := data.get("state", None)) is None:
+#                 raise ValueError("State is required.")
+#         else:
+#             state = None
+
+#         if not isinstance(prompt, str):
+#             prompt = prompt.item()
+
+#         tokens, token_masks = self.tokenizer.tokenize(prompt, state)
+#         return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
+
+
 @dataclasses.dataclass(frozen=True)
 class TokenizePrompt(DataTransformFn):
     tokenizer: _tokenizer.PaligemmaTokenizer
@@ -262,8 +287,31 @@ class TokenizePrompt(DataTransformFn):
         if not isinstance(prompt, str):
             prompt = prompt.item()
 
-        tokens, token_masks = self.tokenizer.tokenize(prompt, state)
-        return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
+        action_advantage = data.get("action_advantage", None)
+        
+        action_advantage_original = copy.deepcopy(action_advantage)
+
+        if action_advantage is not None:
+
+            if len(action_advantage.shape) == 0:  # * True, get in
+                # action_advantage = action_advantage.unsqueeze(0)
+
+                if type(action_advantage) is torch.Tensor:
+                    action_advantage = action_advantage.cpu().numpy()
+
+                # * discretize
+                # TODO: current range is [-1, 1], consider to adjust.
+                action_advantage = np.digitize(action_advantage, bins=np.linspace(-1, 1, 10 + 1)[:-1])
+
+
+        tokens, token_masks = self.tokenizer.tokenize(prompt, state, action_advantage=action_advantage)
+        
+        return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks,
+
+                # * Custom        
+                "action_advantage": action_advantage,
+                "action_advantage_original": action_advantage_original,
+                }
 
 
 @dataclasses.dataclass(frozen=True)
