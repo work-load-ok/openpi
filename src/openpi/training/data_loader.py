@@ -63,13 +63,13 @@ class TransformedDataset(Dataset[T_co]):
     def __len__(self) -> int:
         return len(self._dataset)
 
-class CustomTransformedMultiDataset(TransformedDataset):
+class CustomTransformedMultiDataset(Dataset[T_co]):
     """
     A transformed dataset that applies different transforms to different datasets.
     """
     def __init__(self, dataset: Dataset, transforms: list[Sequence[_transforms.DataTransformFn]]):
-        super().__init__(dataset, transforms)
         self._transforms = [_transforms.compose(transform) for transform in transforms]
+        self._dataset = dataset
         self._num_datasets = np.cumsum([len(data) for data in dataset._datasets])
 
     def __getitem__(self, index: SupportsIndex) -> T_co:
