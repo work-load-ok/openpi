@@ -4,7 +4,7 @@ import dataclasses
 import enum
 import logging
 import pathlib
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Union
 
 import augmax
 from flax import nnx
@@ -106,6 +106,21 @@ class Observation(Generic[ArrayT]):
     # Token loss mask (for FAST autoregressive model).
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
+    # * Custom
+    episode_index: at.Int[ArrayT, "*b"] | None = None
+
+    frame_index: at.Int[ArrayT, "*b"] | None = None
+    
+    progress: at.Float[ArrayT, "*b"] | None = None
+    
+    episode_length: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
+
+    action_advantage: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
+
+    action_advantage_original: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
+
+    image_original: dict[str, at.Float[ArrayT, "*b H W C"]] | None = None
+
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
         """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
@@ -118,6 +133,15 @@ class Observation(Generic[ArrayT]):
                 data["image"][key] = data["image"][key].astype(np.float32) / 255.0 * 2.0 - 1.0
             elif hasattr(data["image"][key], "dtype") and data["image"][key].dtype == torch.uint8:
                 data["image"][key] = data["image"][key].to(torch.float32).permute(0, 3, 1, 2) / 255.0 * 2.0 - 1.0
+        
+        
+        # * Customchange
+        if data.get("image_original", None) is not None:
+            for key in data["image_original"]:
+                if data["image_original"][key].dtype == np.uint8:
+                    data["image_original"][key] = data["image_original"][key].astype(np.float32) / 255.0 * 2.0 - 1.0
+                elif hasattr(data["image_original"][key], "dtype") and data["image_original"][key].dtype == torch.uint8:
+                    data["image_original"][key] = data["image_original"][key].to(torch.float32).permute(0, 3, 1, 2) / 255.0 * 2.0 - 1.0
         return cls(
             images=data["image"],
             image_masks=data["image_mask"],
@@ -126,6 +150,15 @@ class Observation(Generic[ArrayT]):
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
             token_ar_mask=data.get("token_ar_mask"),
             token_loss_mask=data.get("token_loss_mask"),
+
+            # * Custom
+            frame_index=data.get("frame_index"),
+            episode_length=data.get("episode_length"),
+            action_advantage=data.get("action_advantage"),   
+            progress=data.get("progress"),
+            action_advantage_original=data.get("action_advantage_original", None),
+            image_original=data.get("image_original", None),
+            episode_index=data.get("episode_index", None),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
@@ -205,6 +238,14 @@ def preprocess_observation(
         tokenized_prompt_mask=observation.tokenized_prompt_mask,
         token_ar_mask=observation.token_ar_mask,
         token_loss_mask=observation.token_loss_mask,
+        
+        # * Custom change
+        frame_index=observation.frame_index,
+        episode_length=observation.episode_length,
+        action_advantage=observation.action_advantage,
+        action_advantage_original=observation.action_advantage_original,
+        image_original=observation.image_original,
+        episode_index=observation.episode_index,
     )
 
 
