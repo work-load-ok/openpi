@@ -488,6 +488,7 @@ class PI0Pytorch_Custom(PI0Pytorch):
 
 
         # Value head is a 3-layer MLP that takes the last-layer representation of the suffix tokens and outputs a single value
+        action_expert_config = _gemma.get_config(config.action_expert_variant)
         if self.with_value_head:
             mlp_layers = [
                 nn.Linear(action_expert_config.width, action_expert_config.width),
@@ -508,8 +509,7 @@ class PI0Pytorch_Custom(PI0Pytorch):
 
     def _preprocess_observation(self, observation, *, train=True, return_full_obs=False):
         """Helper method to preprocess observation."""
-        observation = _preprocessing.preprocess_observation_pytorch(observation, train=train, return_full_obs=return_full_obs,
-                                                                    
+        observation = _preprocessing.preprocess_observation_pytorch_custom(observation, train=train, return_full_obs=return_full_obs,
                                                                     apply_aug=False)  # ! Changed: Not applying aug for policy and reward model training.
 
         full_obs = (
