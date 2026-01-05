@@ -6,7 +6,7 @@ import dataclasses
 import difflib
 import logging
 import pathlib
-from typing import Any, Literal, Protocol, TypeAlias
+from typing import Any, Literal, Protocol, TypeAlias, List
 
 import etils.epath as epath
 import flax.nnx as nnx
@@ -66,7 +66,7 @@ class AssetsConfig:
 @dataclasses.dataclass(frozen=True)
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
-    repo_id: str | None = None
+    repo_id: str | List[str] | None = None
     # Directory within the assets directory containing the data assets.
     asset_id: str | None = None
     # Contains precomputed normalization stats. If None, normalization will not be performed.
@@ -168,7 +168,7 @@ class ModelTransformFactory(GroupFactory):
 @dataclasses.dataclass(frozen=True)
 class DataConfigFactory(abc.ABC):
     # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
+    repo_id: str | List[str] = tyro.MISSING
     # Determines how the assets will be loaded.
     assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
     # Base config that will be updated by the factory.
@@ -602,7 +602,7 @@ class TrainConfig:
     
     # split:    str  = None  # one of ['train_tasks', 'val_tasks', 'heldout_tasks']
     # * Bugfix, only use train_tasks for training
-    split: str = 'train_tasks'  # * Only use training tasks for training
+    split: str = 'train'  # * Only use training tasks for training, choose from ['train', 'val', 'all']
 
     n_history: int = 0  # Number of history frames to use. If 0, no history will be used.
     with_episode_start: bool = False  # If true, will use the episode start frame as the first frame in the history.
@@ -1065,6 +1065,28 @@ _CONFIGS = [
         overwrite=True,
         exp_name="debug_pi05",
         wandb_enabled=False,
+    ),
+    TrainConfig(
+        name="test_split_merge",
+        model=pi0_config.Pi0Config_Custom(
+            pi05=True,
+            with_value_head=True,
+            loss_value_weight=1.0,
+            loss_value_use_bce=False,
+            loss_action_weight=0.0,
+            p_mask_ego_state=1.0,
+            timestep_difference_mode=False,
+            discrete_state_input=False,
+            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
+        ),
+        data=LerobotPikaDataConfig(
+            repo_id=["/cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1102_21_234_v2-2_3000_lerobot", "/cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1104_20_270_v2-2_3000_lerobot"],
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=16,
+        num_train_steps=100000,
+        overwrite=True,
+        exp_name="test_split_merge",
     ),
     # RoboArena & PolaRiS configs.
     *roboarena_config.get_roboarena_configs(),
