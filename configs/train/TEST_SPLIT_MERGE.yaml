@@ -20,12 +20,17 @@ model:
 # Data configuration
 data:
   _target_: LerobotPikaDataConfig
-  repo_id: /cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot
+  repo_id: 
+    - /cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1102_21_234_v2-2_3000_lerobot
+    - /cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1104_20_270_v2-2_3000_lerobot
   assets:
     _target_: AssetsConfig
     assets_dir: /cpfs01/user/baidexiang/test
     asset_id: flatten_fold
   default_prompt: Flatten the cloth.
+  # base_config:
+  #   _target_: DataConfig
+  #   prompt_from_task: true
   # Repack transforms for image/state/action mapping
   repack_transforms:
     _target_: Group
@@ -41,19 +46,19 @@ data:
           frame_index: frame_index
           progress_gt: progress_gt
           stage_progress_gt: stage_progress_gt
-          # progress: progress  # Required for training, not for inference
+          progress: progress  # Required for training, not for inference
 
 # Weight loader - pretrained weights
 pytorch_weight_path: /cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/
-
+pytorch_model_class: PI0Pytorch_Custom
 # Training hyperparameters
 num_train_steps: 100000
 keep_period: 10000
 save_interval: 10000
 
 # Data loading
-num_workers: 8
-batch_size: 16  # For 1 GPU, use 128 for 8 GPUs
+num_workers: 1
+batch_size: 3  # For 1 GPU, use 128 for 8 GPUs
 
 # Training modes
 with_episode_start: false
