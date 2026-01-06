@@ -638,47 +638,6 @@ def main():
     config = _config.cli()
     train_loop(config)
 
-from openpi.training import config_loader
-import tyro
-import sys
-
-
-def main_custom():
-    """Load config from YAML file and allow command-line overrides.
-    
-    Usage:
-        python scripts/train_pytorch.py ./configs/train/TEST_SPLIT_MERGE.yaml --exp_name test --overwrite
-    """
-    init_logging()
-    
-    # Find the YAML file path from command line arguments
-    yaml_path = None
-    remaining_args = []
-    
-    for arg in sys.argv[1:]:
-        if yaml_path is None and arg.endswith('.yaml') and not arg.startswith('-'):
-            yaml_path = arg
-        else:
-            remaining_args.append(arg)
-    
-    if yaml_path is None:
-        raise ValueError(
-            "Please provide a YAML config file path as the first argument.\n"
-            "Usage: python scripts/train_pytorch.py ./configs/train/YOUR_CONFIG.yaml [--exp_name NAME] [--overwrite]"
-        )
-    
-    # Load the config from YAML file
-    base_config = config_loader.load_config(yaml_path)
-    logging.info(f"Loaded config from {yaml_path}")
-    
-    # Apply remaining_args as overrides to base_config using tyro
-    # Replace sys.argv to only include the remaining arguments
-    sys.argv = [sys.argv[0], base_config.name] + remaining_args
-    config = tyro.extras.overridable_config_cli({base_config.name: (base_config.name, base_config)})
-    
-    train_loop(config)
-
-
 if __name__ == "__main__":
     # main_custom()
     main()
