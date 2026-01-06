@@ -680,4 +680,5 @@ def main_custom():
 
 
 if __name__ == "__main__":
-    main_custom()
+    # main_custom()
+    main()
