@@ -1081,11 +1081,7 @@ _CONFIGS = [
         
         data=LerobotPikaDataConfig(
 
-            repo_id = [
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1023_27_311_v9-3_3000_lerobot",
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1024_27_433_v9-3_3000_lerobot",
-            ],
+            repo_id = "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
 
             assets=AssetsConfig(
                 assets_dir="/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/",
@@ -1134,9 +1130,9 @@ _CONFIGS = [
         save_interval=10000,
 
 
-        num_workers=60,
-        # batch_size=16,  # * 1 gpus
-        batch_size=128, # * 8 gpus
+        num_workers=8,
+        batch_size=16,  # * 1 gpus
+        # batch_size=128, # * 8 gpus
         
         with_episode_start=False,
         timestep_difference_mode=True,  # * Can only use either one of them.
@@ -1162,11 +1158,7 @@ _CONFIGS = [
         
         data=LerobotPikaDataConfig(
 
-            repo_id = [
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1023_27_311_v9-3_3000_lerobot",
-                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1024_27_433_v9-3_3000_lerobot",
-            ],
+            repo_id = "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
 
             assets=AssetsConfig(
                 assets_dir="/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3",
