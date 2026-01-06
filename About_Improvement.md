@@ -117,6 +117,24 @@
     * 新增方法
         - `sample_values()`: 仅预测进度值的前向传播
 
+## policies/pika_policy.py
+* 新增策略
+* 新增`PikaInputs`类（DataTransformFn）
+    * 相机配置
+        - 必需相机：top_head、hand_left、hand_right
+        - 可选相机：his_-100_top_head、his_-100_hand_left、his_-100_hand_right（历史帧）
+        - 相机重命名：top_head→base_0_rgb、hand_left→left_wrist_0_rgb等
+    * 数据处理
+        - state/actions填充至action_dim
+        - 过滤异常值（超出±π范围置0）
+        - 图像格式转换：float32[C,H,W]→uint8[H,W,C]
+    * 传递自定义字段
+        - frame_index、episode_length、episode_index
+        - action_advantage、action_advantage_original
+        - progress、image_original
+* 新增`PikaOutputs`类（DataTransformFn）
+    * 返回actions的前14维（13关节+1夹爪）
+
 ## models_pytorch/preprocessing_pytorch.py
 * 新增`preprocess_observation_pytorch_custom()`函数
     * 新增参数
@@ -130,7 +148,8 @@
         - action_advantage、action_advantage_original
         - frame_index、episode_length、episode_index
         - image_original、progress
-## 修复
-# models_pytorch/transformers_replace/models/gemma/modeling_gemma.py
+
+# 修复
+## models_pytorch/transformers_replace/models/gemma/modeling_gemma.py
 * GemmaRMSNorm
     * 修复`extra_repr`错误打印weight.shape的问题
