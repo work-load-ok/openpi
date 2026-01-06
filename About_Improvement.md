@@ -95,6 +95,9 @@
         - `download_path`: 控制模型下载/读取地址
 
 ## models_pytorch/pi0_pytorch.py
+* 新增辅助函数`get_1d_sincos_pos_embed_from_grid()`
+    * 生成1D正弦余弦位置编码
+    * 用于action_advantage的嵌入表示
 * 新增`PI0Pytorch_Custom`类（继承PI0Pytorch）
     * 配置参数
         - `with_value_head`: 是否启用value head
@@ -108,14 +111,15 @@
         - 3层MLP：Linear→SiLU→Linear→SiLU→Linear
         - 时间步差异模式使用Tanh激活（输出[-1,1]）
         - 普通模式使用Sigmoid激活（输出[0,1]）
+        - 使用suffix_out第一个token（state token）的表示作为输入
     * 改造方法
-        - `_preprocess_observation`: 支持返回full_obs
-        - `embed_prefix()`: 支持action_advantage嵌入
-        - `embed_suffix()`: 支持训练时随机mask ego state
-        - `forward()`: 计算action loss和value loss，返回loss字典
-        - `sample_actions()`: 支持CFG推理模式
+        - `_preprocess_observation`: 支持返回full_obs，apply_aug默认关闭
+        - `embed_prefix()`: action_advantage通过sincos位置编码嵌入，拼接到lang_emb
+        - `embed_suffix()`: 支持训练时按概率mask ego state（置0）
+        - `forward()`: 支持return_loss_dict参数，返回loss_aux_dict用于日志记录
+        - `sample_actions()`: CFG模式下batch拆分为cond/uncond两部分进行采样
     * 新增方法
-        - `sample_values()`: 仅预测进度值的前向传播
+        - `sample_values()`: 使用dummy action和随机time进行前向传播，仅预测进度值
 
 ## policies/pika_policy.py
 * 新增策略
