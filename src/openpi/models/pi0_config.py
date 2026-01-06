@@ -31,7 +31,6 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
-    download_path: str = "gs://big_vision/paligemma_tokenizer.model"
 
     def __post_init__(self):
         if self.max_token_len is None:
@@ -122,6 +121,7 @@ class Pi0Config_Custom(Pi0Config):
 
     p_mask_ego_state: float = 0.0
     cfg_scale: float = 1.0
+    download_path: str = "gs://big_vision/paligemma_tokenizer.model"
 
 
     
