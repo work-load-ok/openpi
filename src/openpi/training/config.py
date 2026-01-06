@@ -559,10 +559,6 @@ class TrainConfig:
     # Optional path to a PyTorch checkpoint to load weights from.
     pytorch_weight_path: str | None = None
 
-    # PyTorch model class name for dynamic model instantiation.
-    # Available options: "PI0Pytorch", "PI0Pytorch_Custom", or custom model class names.
-    # The model class must be registered in the model registry.
-    pytorch_model_class: str = "PI0Pytorch"
 
     # Precision for PyTorch training.
     pytorch_training_precision: Literal["bfloat16", "float32"] = "bfloat16"
@@ -1066,28 +1062,6 @@ _CONFIGS = [
         exp_name="debug_pi05",
         wandb_enabled=False,
     ),
-    TrainConfig(
-        name="test_split_merge",
-        model=pi0_config.Pi0Config_Custom(
-            pi05=True,
-            with_value_head=True,
-            loss_value_weight=1.0,
-            loss_value_use_bce=False,
-            loss_action_weight=0.0,
-            p_mask_ego_state=1.0,
-            timestep_difference_mode=False,
-            discrete_state_input=False,
-            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
-        ),
-        data=LerobotPikaDataConfig(
-            repo_id=["/cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1102_21_234_v2-2_3000_lerobot", "/cpfs01/shared/filtered_cut_data/short_sleeve/demo_A_full_process/v2-2/1104_20_270_v2-2_3000_lerobot"],
-            base_config=DataConfig(prompt_from_task=True),
-        ),
-        batch_size=16,
-        num_train_steps=100000,
-        overwrite=True,
-        exp_name="test_split_merge",
-    ),
     # * VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD
     TrainConfig(
         name="VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD",
@@ -1155,7 +1129,6 @@ _CONFIGS = [
         ),
 
         pytorch_weight_path="/cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/",
-        pytorch_model_class="PI0Pytorch_Custom", # * Custom model class
         num_train_steps=100_000,
         keep_period=10000,
         save_interval=10000,
@@ -1236,7 +1209,6 @@ _CONFIGS = [
         ),
 
         pytorch_weight_path="/cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/",
-        pytorch_model_class="PI0Pytorch_Custom",       # * Custom model class
         num_train_steps=100_000,
         keep_period=10000,
         save_interval=10000,
