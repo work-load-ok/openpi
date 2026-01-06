@@ -66,7 +66,7 @@ class AssetsConfig:
 @dataclasses.dataclass(frozen=True)
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
-    repo_id: str | List[str] | None = None
+    repo_id: str | None = None
     # Directory within the assets directory containing the data assets.
     asset_id: str | None = None
     # Contains precomputed normalization stats. If None, normalization will not be performed.
@@ -168,7 +168,7 @@ class ModelTransformFactory(GroupFactory):
 @dataclasses.dataclass(frozen=True)
 class DataConfigFactory(abc.ABC):
     # The LeRobot repo id.
-    repo_id: str | List[str] = tyro.MISSING
+    repo_id: str = tyro.MISSING
     # Determines how the assets will be loaded.
     assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
     # Base config that will be updated by the factory.
