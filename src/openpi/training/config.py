@@ -1088,6 +1088,169 @@ _CONFIGS = [
         overwrite=True,
         exp_name="test_split_merge",
     ),
+    # * VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD
+    TrainConfig(
+        name="VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD",
+
+        model=pi0_config.Pi0Config_Custom(
+            pi05=True,
+            with_value_head=True,
+            loss_value_weight=1.,
+            loss_value_use_bce=False,
+            loss_action_weight=0.,  # ! No action loss
+            p_mask_ego_state=1.,
+            timestep_difference_mode=True,  # * Can only use either one of them.
+
+            discrete_state_input=False,  # !!!!!! Not using states into prompt
+            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
+        ),
+        
+        data=LerobotPikaDataConfig(
+
+            repo_id = [
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1023_27_311_v9-3_3000_lerobot",
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1024_27_433_v9-3_3000_lerobot",
+            ],
+
+            assets=AssetsConfig(
+                assets_dir="/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/",
+                asset_id="1022_20_590_v9-3_2000_lerobot",
+            ),
+
+            default_prompt="Flatten and fold the cloth.",
+
+            # * why removing "prompt" here will lead to an error in transforms.py
+            # * while in TORCH_Pi05_rl_cpu_10_27, there's no such repacktransform.
+            repack_transforms=_transforms.Group(
+                inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {
+                            "top_head": "observation.images.top_head",
+                            "hand_left": "observation.images.hand_left",
+                            "hand_right": "observation.images.hand_right",
+
+                            "his_-100_top_head": "his_-100_observation.images.top_head",
+                            "his_-100_hand_left": "his_-100_observation.images.hand_left",
+                            "his_-100_hand_right": "his_-100_observation.images.hand_right",
+                        },
+                        "state": "observation.state",
+                        "actions": "action",
+                        
+                        # "prompt": "prompt",  # ! Not adding this for default prompt.
+                        
+                        "episode_length": "episode_length",
+                        "frame_index": "frame_index",
+                        "episode_index": "episode_index",
+                        
+                        "progress_gt": "progress_gt",
+                        "stage_progress_gt": "stage_progress_gt",
+                        "progress": "progress",
+                        # "is_suboptimal": "is_suboptimal",
+                    }
+                )
+            ]
+            )
+        ),
+
+        pytorch_weight_path="/cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/",
+        pytorch_model_class="PI0Pytorch_Custom", # * Custom model class
+        num_train_steps=100_000,
+        keep_period=10000,
+        save_interval=10000,
+
+
+        num_workers=60,
+        # batch_size=16,  # * 1 gpus
+        batch_size=128, # * 8 gpus
+        
+        with_episode_start=False,
+        timestep_difference_mode=True,  # * Can only use either one of them.
+        stage_process_mode=False,        # * Using stage progress supervision
+        skip_norm_stats=True,           # *  No norm stats used.
+    ),
+
+    # * VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD_SINGLE
+    TrainConfig(
+        name="VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD_SINGLE",
+
+        model=pi0_config.Pi0Config_Custom(
+            pi05=True,
+            with_value_head=True,
+            loss_value_weight=1.,
+            loss_value_use_bce=False,
+            loss_action_weight=0.,  # ! No action loss
+            p_mask_ego_state=1.,
+            timestep_difference_mode=False,  # * Can only use either one of them.
+            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
+            discrete_state_input=False,  # !!!!!! Not using states into prompt
+        ),
+        
+        data=LerobotPikaDataConfig(
+
+            repo_id = [
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1022_20_590_v9-3_2000_lerobot",
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1023_27_311_v9-3_3000_lerobot",
+                "/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3/1024_27_433_v9-3_3000_lerobot",
+            ],
+
+            assets=AssetsConfig(
+                assets_dir="/cpfs01/shared/filtered_cut_data/short_sleeve/flatten_fold/v9-3",
+                asset_id="1022_20_590_v9-3_2000_lerobot",
+            ),
+
+            default_prompt="Flatten and fold the cloth.",
+
+            # * why removing "prompt" here will lead to an error in transforms.py
+            # * while in TORCH_Pi05_rl_cpu_10_27, there's no such repacktransform.
+            repack_transforms=_transforms.Group(
+                inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {
+                            "top_head": "observation.images.top_head",
+                            "hand_left": "observation.images.hand_left",
+                            "hand_right": "observation.images.hand_right",
+
+                            # "his_-100_top_head": "his_-100_observation.images.top_head",
+                            # "his_-100_hand_left": "his_-100_observation.images.hand_left",
+                            # "his_-100_hand_right": "his_-100_observation.images.hand_right",
+                        },
+                        "state": "observation.state",
+                        "actions": "action",
+                        
+                        # "prompt": "prompt",  # ! Not adding this for default prompt.
+                        
+                        "episode_length": "episode_length",
+                        "frame_index": "frame_index",
+                        "episode_index": "episode_index",
+                        "progress_gt": "progress_gt",
+                        "stage_progress_gt": "stage_progress_gt",
+                        "progress": "progress",
+                        # "is_suboptimal": "is_suboptimal",
+                    }
+                )
+            ]
+            )
+        ),
+
+        pytorch_weight_path="/cpfs01/user/baidexiang/test_ckpt/torch_ver/pi05_base/",
+        pytorch_model_class="PI0Pytorch_Custom",       # * Custom model class
+        num_train_steps=100_000,
+        keep_period=10000,
+        save_interval=10000,
+
+
+        num_workers=55,
+        # batch_size=16,  # * 1 gpus
+        batch_size=18*8, # * 8 gpus
+        
+        with_episode_start=False,
+        timestep_difference_mode=False,  # * Can only use either one of them.
+        stage_process_mode=False,        # * Using stage progress supervision
+        skip_norm_stats=True,           # *  No norm stats used.
+    ),
     # RoboArena & PolaRiS configs.
     *roboarena_config.get_roboarena_configs(),
     *polaris_config.get_polaris_configs(),
