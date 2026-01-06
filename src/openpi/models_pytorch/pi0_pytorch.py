@@ -84,6 +84,64 @@ def make_att_2d_masks(pad_masks, att_masks):
     pad_2d_masks = pad_masks[:, None, :] * pad_masks[:, :, None]
     return att_2d_masks & pad_2d_masks
 
+def get_1d_sincos_pos_embed_from_grid(pos: torch.Tensor, embed_dim: int) -> torch.Tensor:
+    """
+    Generates 1D sinusoidal positional embeddings in PyTorch.
+
+    Args:
+        embed_dim: Output dimension (D) for each position. Must be even.
+        pos: A list or tensor of positions (M,) to be encoded. 
+             If passed as a numpy array, PyTorch will convert it to a tensor.
+
+    Returns:
+        A tensor of shape (M, D) containing the positional embeddings.
+    """
+    
+    # 1. Input assertion and dimension setup
+    assert embed_dim % 2 == 0, "Embedding dimension must be an even number."
+    
+    # Ensure pos is a tensor and flatten it
+    if isinstance(pos, torch.Tensor):
+        pos = pos.flatten()
+    else:
+        # Assuming input is convertible (e.g., numpy array or list)
+        pos = torch.as_tensor(pos, dtype=torch.float32).flatten()
+        
+    # M = pos.shape[0]  # Number of positions
+    D_half = embed_dim // 2 # D/2
+    
+    # 2. Calculate omega (frequencies)
+    # The original implementation uses 10000 as the base constant
+    
+    # Calculate indices for D/2 dimensions: 0, 1, 2, ..., D/2 - 1
+    # Use torch.float32 (standard)
+    omega = torch.arange(D_half, dtype=torch.float32).to(pos)
+    
+    # Apply the division: i / (D/2)
+    omega = omega / D_half
+    
+    # Apply the base power: 1 / 10000^(i / (D/2))
+    # torch.pow is safer than ** for tensors, or 10000.0 ** omega
+    omega = 1.0 / torch.pow(10000.0, omega)  # (D/2,)
+
+    # 3. Outer product (M, D/2)
+    # The einsum "m,d->md" is equivalent to multiplying (M, 1) by (1, D/2)
+    # which uses broadcasting, or using torch.einsum directly.
+    # out = torch.einsum("m,d->md", pos, omega)
+    
+    # Using broadcasting for better performance/readability in PyTorch
+    # pos shape: (M, 1), omega shape: (1, D/2) -> out shape: (M, D/2)
+    out = pos.unsqueeze(1) * omega.unsqueeze(0)  
+
+    # 4. Calculate sine and cosine components
+    emb_sin = torch.sin(out)  # (M, D/2)
+    emb_cos = torch.cos(out)  # (M, D/2)
+
+    # 5. Concatenate to get final embedding (M, D)
+    emb = torch.cat([emb_sin, emb_cos], dim=1) 
+    
+    return emb
+
 
 class PI0Pytorch(nn.Module):
     def __init__(self, config):
