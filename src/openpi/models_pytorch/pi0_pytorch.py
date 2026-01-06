@@ -9,8 +9,6 @@ import torch.nn.functional as F  # noqa: N812
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
-from openpi.models_pytorch.model_registry import register_pytorch_model
-
 
 # =============================================================================
 # Helper Functions
@@ -87,7 +85,6 @@ def make_att_2d_masks(pad_masks, att_masks):
     return att_2d_masks & pad_2d_masks
 
 
-@register_pytorch_model()
 class PI0Pytorch(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -468,7 +465,6 @@ class PI0Pytorch(nn.Module):
         return self.action_out_proj(suffix_out)
 
 
-@register_pytorch_model()
 class PI0Pytorch_Custom(PI0Pytorch):
     def __init__(self, config):
         super().__init__(config)
