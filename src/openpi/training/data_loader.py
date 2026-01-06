@@ -15,8 +15,7 @@ import openpi.models.model as _model
 import openpi.training.config as _config
 from openpi.training.droid_rlds_dataset import DroidRldsDataset
 import openpi.transforms as _transforms
-from sklearn.model_selection import train_test_split
-from openpi.training.custom_lerobot_dataset import CustomMultiLeRobotDataset, CustomLeRobotDataset
+from openpi.training.custom_lerobot_dataset import CustomLeRobotDataset
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -62,23 +61,6 @@ class TransformedDataset(Dataset[T_co]):
 
     def __len__(self) -> int:
         return len(self._dataset)
-
-class CustomTransformedMultiDataset(Dataset[T_co]):
-    """
-    A transformed dataset that applies different transforms to different datasets.
-    """
-    def __init__(self, dataset: Dataset, transforms: list[Sequence[_transforms.DataTransformFn]]):
-        self._transforms = [_transforms.compose(transform) for transform in transforms]
-        self._dataset = dataset
-        self._num_datasets = np.cumsum([len(data) for data in dataset._datasets])
-
-    def __getitem__(self, index: SupportsIndex) -> T_co:
-        dataset_index = np.where(self._num_datasets > index)[0][0]
-        return self._transforms[dataset_index](self._dataset[index])
-
-    def __len__(self) -> int:
-        return len(self._dataset)
-
 
 class IterableTransformedDataset(IterableDataset[T_co]):
     def __init__(
@@ -151,7 +133,7 @@ def create_torch_dataset(
     """Create a dataset for training."""
     # 自定义参数，如果config不为空，则使用config中额外定义的参数进行数据处理
     if config is not None:
-        split= config.split
+        split= config.split if config.split else 'all'
         data_kwargs = dict(
             n_history=config.n_history,
             with_episode_start=config.with_episode_start,
@@ -163,57 +145,25 @@ def create_torch_dataset(
         data_kwargs = {}
         split = 'all'
 
-    repo_ids = data_config.repo_id
-    if repo_ids is None:
+    repo_id = data_config.repo_id
+    if repo_id is None:
         raise ValueError("Repo ID is not set. Cannot create dataset.")
-    if repo_ids == "fake":
+    if repo_id == "fake":
         return FakeDataset(model_config, num_samples=1024)
     
-    # 增加从给定目录下读取多个数据集的功能
-    if isinstance(repo_ids, str):
-        if not os.path.isdir(repo_ids):
-            raise ValueError(f"Directory {repo_ids} does not exist.")
-        sub_required_dirs = {'meta','data','videos'}
-        subs = {d for d in os.listdir(repo_ids) if os.path.isdir(os.path.join(repo_ids, d))}
-        if not sub_required_dirs.issubset(subs): # 检查是否为lerobot数据结构，如果不是，则为多个lerobot数据集的父目录
-            repo_ids = [os.path.join(repo_ids, d) for d in subs]
-
-    if isinstance(repo_ids, str):
-        dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_ids)
-        dataset = CustomLeRobotDataset(
-            repo_id=repo_ids,
-            episodes=episodes_split_through_task(repo_ids, split_type=split, shuffle=False),
-            delta_timestamps={
-                key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-            },
-            video_backend='pyav',
-            **data_kwargs,
-        )
-    elif isinstance(repo_ids, list):
-        repo_to_episodes = {
-            repo_id: episodes_split_through_task(repo_id, split_type=split, shuffle=False) for repo_id in repo_ids
-        }
-        dataset_meta_list = [lerobot_dataset.LeRobotDatasetMetadata(repo_id) for repo_id in repo_ids]
-        all_delta_timestamps =[{
+   
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+    dataset = CustomLeRobotDataset(
+        repo_id=repo_id,
+        episodes=episodes_split_through_task(repo_id, split_type=split, shuffle=False),
+        delta_timestamps={
             key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-            } for dataset_meta in dataset_meta_list]
-        dataset = CustomMultiLeRobotDataset(
-            repo_ids=repo_ids,
-            episodes=repo_to_episodes,
-            delta_timestamps=all_delta_timestamps,
-            video_backend='pyav',
-            **data_kwargs,
-        )
-    else:
-        raise ValueError(f"Invalid repo_id: {repo_ids}, must be a string or a list of strings.")
-
+        },
+        video_backend='pyav',
+        **data_kwargs,
+    )
     if data_config.prompt_from_task:
-        if isinstance(repo_ids, str):
-            # dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_ids)
-            dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
-        elif isinstance(repo_ids, list):
-            all_tasks = [dataset_meta.tasks for dataset_meta in dataset_meta_list]
-        dataset = CustomTransformedMultiDataset(dataset, [[_transforms.PromptFromLeRobotTask(tasks)] for tasks in all_tasks])
+        dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
 
     return dataset
 
