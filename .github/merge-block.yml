@@ -1,0 +1,4 @@
+blocked_branches:
+  - release/simple
+  - experiment/*
+  - docs/*
