@@ -213,7 +213,7 @@ def create_torch_dataset(
             dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
         elif isinstance(repo_ids, list):
             all_tasks = [dataset_meta.tasks for dataset_meta in dataset_meta_list]
-        dataset = CustomTransformedMultiDataset(dataset, [[_transforms.PromptFromLeRobotTask(tasks)] for tasks in all_tasks])
+            dataset = CustomTransformedMultiDataset(dataset, [[_transforms.PromptFromLeRobotTask(tasks)] for tasks in all_tasks])
 
     return dataset
 
