@@ -3128,7 +3128,6 @@ dependencies = [
     { name = "pillow" },
     { name = "polars" },
     { name = "rich" },
-    { name = "scikit-learn" },
     { name = "sentencepiece" },
     { name = "torch" },
     { name = "tqdm-loggable" },
