@@ -48,7 +48,7 @@ We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies. See the [
 GIT_LFS_SKIP_SMUDGE=1 uv sync
 GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 
-Then modify transformers
+# Then modify transformers
 uv pip install transformers==4.53.2
 cp -r ./src/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.11/site-packages/transformers/
 ```
