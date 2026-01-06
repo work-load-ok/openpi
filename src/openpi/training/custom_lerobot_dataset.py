@@ -1,13 +1,7 @@
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, MultiLeRobotDataset, LeRobotDatasetMetadata
-from lerobot.common.datasets.utils import get_safe_version, get_episode_data_index, check_timestamps_sync, check_delta_timestamps, get_delta_indices
-from lerobot.common.datasets.video_utils import VideoFrame
-import torch
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import random
-import logging
-import os
 from pathlib import Path
 from typing import Callable
-import datasets
 
 class CustomLeRobotDataset(LeRobotDataset):
     """
@@ -298,66 +292,3 @@ class CustomLeRobotDataset(LeRobotDataset):
             
             item_sequence.insert(-1, his_item.copy())  # Note the inserting position
         return N_HISTORY, item_sequence
-
-class CustomMultiLeRobotDataset(MultiLeRobotDataset,torch.utils.data.Dataset):
-    """A dataset consisting of multiple underlying `CustomLeRobotDataset`s.
-
-    The underlying `CustomLeRobotDataset`s are effectively concatenated, and this class adopts much of the API
-    structure of `LeRobotDataset`.
-    """
-
-    def __init__(
-        self,
-        repo_ids: list[str],
-        root: str | Path | None = None,
-        episodes: dict | None = None,
-        image_transforms: Callable | None = None,
-        delta_timestamps: dict[list[float]] | None = None,
-        tolerances_s: dict | None = None,
-        download_videos: bool = True,
-        video_backend: str | None = None,
-        
-        **custom_kwargs,
-    ):
-        # super().__init__()
-        torch.utils.data.Dataset.__init__(self)
-        self.repo_ids = repo_ids
-        
-        # Use more relaxed tolerance
-        self.tolerances_s = tolerances_s if tolerances_s else dict.fromkeys(repo_ids, 0.1)
-        
-        self._datasets = [
-            CustomLeRobotDataset(
-                repo_id,
-                episodes=episodes[repo_id] if episodes else None,
-                image_transforms=image_transforms,
-                delta_timestamps=del_ts,
-                tolerance_s=self.tolerances_s[repo_id],
-                download_videos=download_videos,
-                video_backend=video_backend,
-                **custom_kwargs
-            )
-            for repo_id, del_ts in zip(repo_ids, delta_timestamps)
-        ]
-        
-        # Disable any data keys that are not common across all of the datasets
-        self.disabled_features = set()
-        intersection_features = set(self._datasets[0].features)
-        for ds in self._datasets:
-            intersection_features.intersection_update(ds.features)
-        if len(intersection_features) == 0:
-            raise RuntimeError(
-                "Multiple datasets were provided but they had no keys common to all of them. "
-                "The multi-dataset functionality currently only keeps common keys."
-            )
-        for repo_id, ds in zip(self.repo_ids, self._datasets, strict=True):
-            extra_keys = set(ds.features).difference(intersection_features)
-            if len(extra_keys) > 0:
-                logging.warning(
-                    f"keys {extra_keys} of {repo_id} were disabled as they are not contained in all the "
-                    "other datasets."
-                )
-                self.disabled_features.update(extra_keys)
-        
-        self.image_transforms = image_transforms
-        self.delta_timestamps = delta_timestamps
