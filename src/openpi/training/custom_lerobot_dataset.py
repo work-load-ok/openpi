@@ -121,8 +121,6 @@ class CustomLeRobotDataset(LeRobotDataset):
         if self.delta_indices is not None:
             episode_level_dict = self.handle_delta_indices(idx, ep_idx, episode_level_dict)
         
-        episode_level_dict['action_advantage'] = item.get('action_advantage', None)
-        
         # Add task as a string
         task_idx = item["task_index"].item()
         episode_level_dict["task"] = self.meta.tasks[task_idx]
@@ -132,7 +130,7 @@ class CustomLeRobotDataset(LeRobotDataset):
         # Custom: Handle timestep difference mode
         final_item = self.handle_timestep_difference_mode(idx, ep_idx, final_item,_EP_IDX, _CUR_TIMESTAMP)
         # Append episode-level data
-        final_item = {**final_item, **episode_level_dict}
+        final_item = {**final_item, **item_sequence[-1], **episode_level_dict}
         
         # Custom: Compute stage progress labels
         stage_progress_gt_random = final_item[f"his_-100_stage_progress_gt"].item()
