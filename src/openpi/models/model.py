@@ -115,10 +115,6 @@ class Observation(Generic[ArrayT]):
     
     episode_length: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
 
-    action_advantage: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
-
-    action_advantage_original: Union[at.Int[ArrayT, "*b"], at.Float[ArrayT, "*b"]] | None = None
-
     image_original: dict[str, at.Float[ArrayT, "*b H W C"]] | None = None
 
     @classmethod
@@ -153,10 +149,8 @@ class Observation(Generic[ArrayT]):
 
             # * Custom
             frame_index=data.get("frame_index"),
-            episode_length=data.get("episode_length"),
-            action_advantage=data.get("action_advantage"),   
+            episode_length=data.get("episode_length"), 
             progress=data.get("progress"),
-            action_advantage_original=data.get("action_advantage_original", None),
             image_original=data.get("image_original", None),
             episode_index=data.get("episode_index", None),
         )
@@ -242,8 +236,6 @@ def preprocess_observation(
         # * Custom change
         frame_index=observation.frame_index,
         episode_length=observation.episode_length,
-        action_advantage=observation.action_advantage,
-        action_advantage_original=observation.action_advantage_original,
         image_original=observation.image_original,
         episode_index=observation.episode_index,
     )
