@@ -595,20 +595,10 @@ class TrainConfig:
     
 #***************************************************
     is_train: bool = True  # * Only use partial data in training
-    
     # split:    str  = None  # one of ['train_tasks', 'val_tasks', 'heldout_tasks']
     # * Bugfix, only use train_tasks for training
-    split: str = 'train'  # * Only use training tasks for training, choose from ['train', 'val', 'all']
-
-    n_history: int = 0  # Number of history frames to use. If 0, no history will be used.
-    with_episode_start: bool = False  # If true, will use the episode start frame as the first frame in the history.
-    skip_sample_ratio_within_episode: float = 0.
-    # p_video_rewind: float = 0.
-    timestep_difference_mode: bool = False
-    stage_process_mode: bool = False
+    split: str = 'all'  # * Only use training tasks for training, choose from ['train', 'val', 'all']
     drop_last: bool = True  # If true, will drop the last incomplete batch.
-    
-
     skip_norm_stats: bool = False
 #***************************************************
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
@@ -1068,15 +1058,9 @@ _CONFIGS = [
 
         model=pi0_config.Pi0Config_Custom(
             pi05=True,
-            with_value_head=True,
             loss_value_weight=1.,
-            loss_value_use_bce=False,
-            loss_action_weight=0.,  # ! No action loss
-            p_mask_ego_state=1.,
-            timestep_difference_mode=True,  # * Can only use either one of them.
-
+            loss_action_weight=0.,  
             discrete_state_input=False,  # !!!!!! Not using states into prompt
-            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
         ),
         
         data=LerobotPikaDataConfig(
@@ -1133,10 +1117,6 @@ _CONFIGS = [
         num_workers=8,
         batch_size=16,  # * 1 gpus
         # batch_size=128, # * 8 gpus
-        
-        with_episode_start=False,
-        timestep_difference_mode=True,  # * Can only use either one of them.
-        stage_process_mode=False,        # * Using stage progress supervision
         skip_norm_stats=True,           # *  No norm stats used.
     ),
 
@@ -1146,13 +1126,8 @@ _CONFIGS = [
 
         model=pi0_config.Pi0Config_Custom(
             pi05=True,
-            with_value_head=True,
             loss_value_weight=1.,
-            loss_value_use_bce=False,
             loss_action_weight=0.,  # ! No action loss
-            p_mask_ego_state=1.,
-            timestep_difference_mode=False,  # * Can only use either one of them.
-            download_path="/cpfs01/user/baidexiang/test_ckpt/big_vision/paligemma_tokenizer.model",
             discrete_state_input=False,  # !!!!!! Not using states into prompt
         ),
         
@@ -1209,10 +1184,6 @@ _CONFIGS = [
         num_workers=55,
         # batch_size=16,  # * 1 gpus
         batch_size=18*8, # * 8 gpus
-        
-        with_episode_start=False,
-        timestep_difference_mode=False,  # * Can only use either one of them.
-        stage_process_mode=False,        # * Using stage progress supervision
         skip_norm_stats=True,           # *  No norm stats used.
     ),
     # RoboArena & PolaRiS configs.
