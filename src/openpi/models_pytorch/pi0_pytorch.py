@@ -486,7 +486,7 @@ class PI0Pytorch_Custom(PI0Pytorch):
 
     def _preprocess_observation(self, observation, *, train=True, return_full_obs=False):
         """Helper method to preprocess observation."""
-        observation = _preprocessing.preprocess_observation_pytorch_custom(observation, train=train, return_full_obs=return_full_obs,
+        observation = _preprocessing.preprocess_observation_pytorch_custom(observation, train=self.training, return_full_obs=return_full_obs,
                                                                     apply_aug=False)  # ! Changed: Not applying aug for policy and reward model training.
 
         full_obs = (
