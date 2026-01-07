@@ -27,13 +27,6 @@ class CustomLeRobotDataset(LeRobotDataset):
         force_cache_sync: bool = False,
         download_videos: bool = True,
         video_backend: str | None = 'pyav',
-        
-        # * Custom parameters
-        n_history: int = 0,
-        with_episode_start: bool = False,
-        skip_sample_ratio_within_episode: float = 0.,  # * 0 for no skipping, 0.5 for skipping first 50% samples in an episode
-        timestep_difference_mode: bool = False,  # * Selecting samples from two different timesteps and do comparison as learning target.
-        stage_process_mode: bool = False,  # * Using stage progress supervision.
     ):
         """
         Initialize CustomLeRobotDataset.
@@ -49,13 +42,6 @@ class CustomLeRobotDataset(LeRobotDataset):
             force_cache_sync: Force sync with remote cache
             download_videos: Whether to download video files
             video_backend: Video decoding backend
-            
-            # Custom args:
-            n_history: Number of history frames to include
-            with_episode_start: Include episode start frame
-            skip_sample_ratio_within_episode: Ratio of samples to skip at episode start
-            timestep_difference_mode: Enable timestep difference learning
-            stage_process_mode: Enable stage progress supervision
         """
         # 初始化继承自LeRobotDataset的初始化参数
         super().__init__(
@@ -70,18 +56,6 @@ class CustomLeRobotDataset(LeRobotDataset):
             download_videos,
             video_backend
         )
-        # Store custom parameters before calling parent __init__
-        self.n_history = n_history
-        self.with_episode_start = with_episode_start
-        self.skip_sample_ratio_within_episode = skip_sample_ratio_within_episode
-        self.timestep_difference_mode = timestep_difference_mode
-        self.stage_process_mode = stage_process_mode
-        
-        # Validation
-        assert self.skip_sample_ratio_within_episode <= 0.5
-        if self.timestep_difference_mode:
-            assert not self.with_episode_start, "Cannot use episode start when using timestep difference mode."
-
         # * Custom: Episode index to array index mapping
         self.ep_idx_to_arr_idx = {ep_idx: arr_idx for arr_idx, ep_idx in enumerate(episodes)} if episodes else {}
     
@@ -155,55 +129,19 @@ class CustomLeRobotDataset(LeRobotDataset):
         
         item_sequence.append(item.copy())
         
-        # Handle timestep difference mode
-        if self.timestep_difference_mode:
-            final_item = self.handle_timestep_difference_mode(idx, ep_idx, final_item,_EP_IDX, _CUR_TIMESTAMP)
-        
-        # Handle episode start frame
-        if self.with_episode_start:
-            final_item = self.handle_episode_start_frame(idx, ep_idx, item, final_item)
-        
-        # Handle history frames
-        N_HISTORY, item_sequence = self.handle_history_frames(idx, ep_idx,  
-                                                              cur_timestamp=cur_timestamp,
-                                                              item_sequence=item_sequence
-                                                              )
-        # Unpack the item_sequence
-        for his_idx in range(-N_HISTORY, 0):
-            his_pos_in_sequence = his_idx - 1
-            his_item = item_sequence[his_pos_in_sequence]
-            
-            _keys = list(his_item.keys())
-            for key in _keys:
-                new_key = f"his_{his_idx}_{key}"
-                his_item[new_key] = his_item.pop(key)
-                final_item = {**final_item, **his_item}
-        
-        final_item = {**final_item, **item_sequence[-1]}
-        
+        # Custom: Handle timestep difference mode
+        final_item = self.handle_timestep_difference_mode(idx, ep_idx, final_item,_EP_IDX, _CUR_TIMESTAMP)
         # Append episode-level data
         final_item = {**final_item, **episode_level_dict}
         
-        # Compute progress labels
-        if self.timestep_difference_mode:
-            if self.stage_process_mode:
-                stage_progress_gt_random = final_item[f"his_-100_stage_progress_gt"].item()
-                stage_progress_gt = final_item[f"stage_progress_gt"].item()
-                final_item['progress'] = stage_progress_gt - stage_progress_gt_random
-            else:
-                progress_gt_random = final_item[f"his_-100_progress_gt"].item()
-                progress_gt = final_item[f"progress_gt"].item()
-                final_item['progress'] = progress_gt - progress_gt_random
-        else:
-            if self.stage_process_mode:
-                stage_progress_gt = final_item[f"stage_progress_gt"].item()
-                final_item['progress'] = stage_progress_gt
-            else:
-                progress_gt = final_item[f"progress_gt"].item()
-                final_item['progress'] = progress_gt
-        
+        # Custom: Compute stage progress labels
+        stage_progress_gt_random = final_item[f"his_-100_stage_progress_gt"].item()
+        stage_progress_gt = final_item[f"stage_progress_gt"].item()
+        final_item['progress'] = stage_progress_gt - stage_progress_gt_random
+
         return final_item
 
+    # Custom: Handle delta indices for action sequences
     def handle_delta_indices(self, idx, ep_idx, episode_level_dict) -> dict:
         query_indices = None
         arr_idx = self.ep_idx_to_arr_idx.get(ep_idx, ep_idx) if self.episodes else ep_idx
@@ -215,6 +153,7 @@ class CustomLeRobotDataset(LeRobotDataset):
             episode_level_dict[key] = val
         return episode_level_dict
     
+    # Custom: Handle timestep difference mode
     def handle_timestep_difference_mode(self, idx, ep_idx, final_item,_EP_IDX, _CUR_TIMESTAMP) -> dict:
         """
         同一个视频片段里的不同两帧？
@@ -244,51 +183,3 @@ class CustomLeRobotDataset(LeRobotDataset):
 
         final_item = {**final_item, **random_item}
         return final_item
-
-    def handle_episode_start_frame(self, idx, ep_idx, item,final_item) -> dict:
-        start_frame_name = -100
-        
-        cur_frame_index = item['frame_index'].item()
-        start_index = idx - cur_frame_index
-        cur_progress_gt = item['progress_gt'].item()
-        if cur_progress_gt == 0:
-            start_index = idx
-        start_item = self.get_sample_with_imgs_from_idx(start_index)
-        start_episode_ind = start_item['episode_index'].item()
-        start_progress_gt = start_item['progress_gt'].item()
-        
-        while start_episode_ind != ep_idx or start_progress_gt != 0:
-            start_index += 1
-            start_item = self.get_sample_with_imgs_from_idx(start_index)
-            start_episode_ind = start_item['episode_index'].item()
-            start_progress_gt = start_item['progress_gt'].item()
-        
-        _keys = list(start_item.keys())
-        for key in _keys:
-            new_key = f"his_{start_frame_name}_{key}"
-            start_item[new_key] = start_item.pop(key)
-        
-        final_item = {**final_item, **start_item}
-        return final_item
-    
-    def handle_history_frames(self, idx, ep_idx, cur_timestamp, item_sequence) -> dict:
-        N_HISTORY = self.n_history
-        for his_idx in range(-N_HISTORY, 0):
-            check_his_idx = his_idx + idx
-            check_item = self.hf_dataset[check_his_idx]
-            check_episode_ind = check_item['episode_index'].item()
-            check_timestamp = check_item['timestamp'].item()
-            
-            if check_his_idx >= 0 and check_episode_ind == ep_idx and check_timestamp < cur_timestamp:
-                his_item = check_item
-            else:
-                # idx is the start of a new episode, repeat it as its history
-                his_item = self.get_sample_with_imgs_from_idx(idx)
-            
-            his_episode_ind = his_item['episode_index'].item()
-            his_timestamp = his_item['timestamp'].item()
-            assert his_episode_ind == ep_idx and his_timestamp <= cur_timestamp, \
-                f"his_item['episode_index']: {his_episode_ind}, ep_idx: {ep_idx}. his_item['timestamp']: {his_timestamp}, cur_timestamp: {cur_timestamp}"
-            
-            item_sequence.insert(-1, his_item.copy())  # Note the inserting position
-        return N_HISTORY, item_sequence
