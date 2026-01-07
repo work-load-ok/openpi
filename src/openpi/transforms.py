@@ -287,31 +287,9 @@ class TokenizePrompt(DataTransformFn):
         if not isinstance(prompt, str):
             prompt = prompt.item()
 
-        action_advantage = data.get("action_advantage", None)
+        tokens, token_masks = self.tokenizer.tokenize(prompt, state,)
         
-        action_advantage_original = copy.deepcopy(action_advantage)
-
-        if action_advantage is not None:
-
-            if len(action_advantage.shape) == 0:  # * True, get in
-                # action_advantage = action_advantage.unsqueeze(0)
-
-                if type(action_advantage) is torch.Tensor:
-                    action_advantage = action_advantage.cpu().numpy()
-
-                # * discretize
-                # TODO: current range is [-1, 1], consider to adjust.
-                action_advantage = np.digitize(action_advantage, bins=np.linspace(-1, 1, 10 + 1)[:-1])
-
-
-        tokens, token_masks = self.tokenizer.tokenize(prompt, state, action_advantage=action_advantage)
-        
-        return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks,
-
-                # * Custom        
-                "action_advantage": action_advantage,
-                "action_advantage_original": action_advantage_original,
-                }
+        return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
 
 
 @dataclasses.dataclass(frozen=True)
