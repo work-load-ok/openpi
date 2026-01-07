@@ -732,7 +732,7 @@ class PI0Pytorch_Custom(PI0Pytorch):
         """Do a full training forward pass and compute the loss (batch_size x num_steps x num_motors)"""
 
         # print("observation.action_advantage_original:", observation.action_advantage_original)
-        images, img_masks, lang_tokens, lang_masks, state, obs_full = self._preprocess_observation(observation, train=True, return_full_obs=True)
+        images, img_masks, lang_tokens, lang_masks, state, obs_full = self._preprocess_observation(observation, train=self.training, return_full_obs=True)
 
         if noise is None:
             noise = self.sample_noise(actions.shape, actions.device)
