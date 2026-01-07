@@ -526,39 +526,21 @@ class PI0Pytorch(nn.Module):
 class PI0Pytorch_Custom(PI0Pytorch):
     def __init__(self, config):
         super().__init__(config)
-
-        self.with_value_head = getattr(config, "with_value_head", False)
         self.loss_value_weight = getattr(config, "loss_value_weight", 0.0)
-        self.loss_value_use_bce = getattr(config, "loss_value_use_bce", False)
         self.loss_action_weight = getattr(config, "loss_action_weight", 1.0)
-        self.p_mask_ego_state = getattr(config, "p_mask_ego_state", 0.0)
-        self.timestep_difference_mode = getattr(config, "timestep_difference_mode", False)
 
-        self.cfg_scale = getattr(config, "cfg_scale", 1.0)  # * Default 1.0, indicating high quality
-
-        if self.timestep_difference_mode:
-            assert not self.loss_value_use_bce, "Cannot use BCE loss with timestep difference mode, \
-                                                since the output range is [-1, 1] instead of [0, 1]."
-
-
+        # * Custom
         # Value head is a 3-layer MLP that takes the last-layer representation of the suffix tokens and outputs a single value
         action_expert_config = _gemma.get_config(config.action_expert_variant)
-        if self.with_value_head:
-            mlp_layers = [
-                nn.Linear(action_expert_config.width, action_expert_config.width),
-                nn.SiLU(),  # Equivalent to swish activation
-                nn.Linear(action_expert_config.width, action_expert_config.width),
-                nn.SiLU(),  # Equivalent to swish activation
-                nn.Linear(action_expert_config.width, 1),
-            ]
-
-            if self.timestep_difference_mode:
-                # If using timestep difference mode, use tanh activation to bound output between [-1, 1]
-                mlp_layers.append(nn.Tanh())
-            elif not self.loss_value_use_bce:
-                mlp_layers.append(nn.Sigmoid())
-
-            self.value_head = nn.Sequential(*mlp_layers)
+        mlp_layers = [
+            nn.Linear(action_expert_config.width, action_expert_config.width),
+            nn.SiLU(),  # Equivalent to swish activation
+            nn.Linear(action_expert_config.width, action_expert_config.width),
+            nn.SiLU(),  # Equivalent to swish activation
+            nn.Linear(action_expert_config.width, 1),
+        ]
+        mlp_layers.append(nn.Tanh())
+        self.value_head = nn.Sequential(*mlp_layers)
 
 
     def _preprocess_observation(self, observation, *, train=True, return_full_obs=False):
@@ -576,159 +558,9 @@ class PI0Pytorch_Custom(PI0Pytorch):
             )
         return full_obs if return_full_obs else full_obs[:-1]
 
-    def embed_prefix(
-        self, images, img_masks, lang_tokens, lang_masks,
-        action_advantage=None
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Embed images with SigLIP and language tokens with embedding layer to prepare
-        for PaliGemma transformer processing.
-        """
-        embs = []
-        pad_masks = []
-        att_masks = []
-
-        # Process images
-        for img, img_mask in zip(images, img_masks, strict=True):
-
-            def image_embed_func(img):
-                return self.paligemma_with_expert.embed_image(img)
-
-            img_emb = self._apply_checkpoint(image_embed_func, img)
-
-            bsize, num_img_embs = img_emb.shape[:2]
-
-            embs.append(img_emb)
-            pad_masks.append(img_mask[:, None].expand(bsize, num_img_embs))
-
-            # Create attention masks so that image tokens attend to each other
-            att_masks += [0] * num_img_embs
-
-        # Process language tokens
-        def lang_embed_func(lang_tokens):
-            lang_emb = self.paligemma_with_expert.embed_language_tokens(lang_tokens)
-            lang_emb_dim = lang_emb.shape[-1]
-            return lang_emb * math.sqrt(lang_emb_dim)
-
-        lang_emb = self._apply_checkpoint(lang_embed_func, lang_tokens)
-
-        # print("action_advantage in embed_prefix:", action_advantage)
-
-        if action_advantage is not None:
-
-            action_advantage = get_1d_sincos_pos_embed_from_grid(action_advantage, lang_emb.shape[-1]).to(lang_emb.device)
-            action_advantage = action_advantage.unsqueeze(1)  # * [bs, 1, 2048]
-            lang_emb = torch.cat([lang_emb, action_advantage], dim=1)  # * [bs, 201, 2048]
-
-            # * lang_mask
-            lang_masks = torch.cat([lang_masks, torch.ones((lang_masks.shape[0], 1)).to(lang_masks)], dim=1)  # * [bs, 201]
-        
-        embs.append(lang_emb)
-        pad_masks.append(lang_masks)
-
-        # full attention between image and language inputs
-        num_lang_embs = lang_emb.shape[1]
-        att_masks += [0] * num_lang_embs
-
-        embs = torch.cat(embs, dim=1)
-        pad_masks = torch.cat(pad_masks, dim=1)
-        att_masks = torch.tensor(att_masks, dtype=torch.bool, device=pad_masks.device)
-
-        # Get batch size from the first dimension of the concatenated tensors
-        bsize = pad_masks.shape[0]
-        att_masks = att_masks[None, :].expand(bsize, len(att_masks))
-
-        return embs, pad_masks, att_masks
-
-    def embed_suffix(self, state, noisy_actions, timestep):
-        """Embed state, noisy_actions, timestep to prepare for Expert Gemma processing."""
-        embs = []
-        pad_masks = []
-        att_masks = []
-
-        if not self.pi05:
-            # --- Start of Modifications ---
-            # Randomly mask the ego state during training
-            if self.training and self.p_mask_ego_state > 0.0:
-                mask = torch.bernoulli(torch.full((state.shape[0],), self.p_mask_ego_state, device=state.device)).bool()
-                state[mask] = 0.0
-            # --- End of Modifications ---
-                
-            if self.state_proj.weight.dtype == torch.float32:
-                state = state.to(torch.float32)
-
-            # Embed state
-            def state_proj_func(state):
-                return self.state_proj(state)
-
-            state_emb = self._apply_checkpoint(state_proj_func, state)
-
-            embs.append(state_emb[:, None, :])
-            bsize = state_emb.shape[0]
-            device = state_emb.device
-
-            state_mask = torch.ones(bsize, 1, dtype=torch.bool, device=device)
-            pad_masks.append(state_mask)
-
-            # Set attention masks so that image and language inputs do not attend to state or actions
-            att_masks += [1]
-
-        # Embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
-        time_emb = create_sinusoidal_pos_embedding(
-            timestep, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0, device=timestep.device
-        )
-        time_emb = time_emb.type(dtype=timestep.dtype)
-
-        # Fuse timestep + action information using an MLP
-        def action_proj_func(noisy_actions):
-            return self.action_in_proj(noisy_actions)
-
-        action_emb = self._apply_checkpoint(action_proj_func, noisy_actions)
-
-        if not self.pi05:
-            time_emb = time_emb[:, None, :].expand_as(action_emb)
-            action_time_emb = torch.cat([action_emb, time_emb], dim=2)
-
-            # Apply MLP layers
-            def mlp_func(action_time_emb):
-                x = self.action_time_mlp_in(action_time_emb)
-                x = F.silu(x)  # swish == silu
-                return self.action_time_mlp_out(x)
-
-            action_time_emb = self._apply_checkpoint(mlp_func, action_time_emb)
-            adarms_cond = None
-        else:
-            # time MLP (for adaRMS)
-            def time_mlp_func(time_emb):
-                x = self.time_mlp_in(time_emb)
-                x = F.silu(x)  # swish == silu
-                x = self.time_mlp_out(x)
-                return F.silu(x)
-
-            time_emb = self._apply_checkpoint(time_mlp_func, time_emb)
-            action_time_emb = action_emb
-            adarms_cond = time_emb
-
-        # Add to input tokens
-        embs.append(action_time_emb)
-
-        bsize, action_time_dim = action_time_emb.shape[:2]
-        action_time_mask = torch.ones(bsize, action_time_dim, dtype=torch.bool, device=timestep.device)
-        pad_masks.append(action_time_mask)
-
-        # Set attention masks so that image, language and state inputs do not attend to action tokens
-        att_masks += [1] + ([0] * (self.config.action_horizon - 1))
-
-        embs = torch.cat(embs, dim=1)
-        pad_masks = torch.cat(pad_masks, dim=1)
-        att_masks = torch.tensor(att_masks, dtype=embs.dtype, device=embs.device)
-        att_masks = att_masks[None, :].expand(bsize, len(att_masks))
-
-        return embs, pad_masks, att_masks, adarms_cond
-
     def forward(self, observation, actions, noise=None, time=None, return_loss_dict=False) -> tuple[Tensor, dict]:
         """Do a full training forward pass and compute the loss (batch_size x num_steps x num_motors)"""
 
-        # print("observation.action_advantage_original:", observation.action_advantage_original)
         images, img_masks, lang_tokens, lang_masks, state, obs_full = self._preprocess_observation(observation, train=True, return_full_obs=True)
 
         if noise is None:
@@ -742,13 +574,8 @@ class PI0Pytorch_Custom(PI0Pytorch):
         x_t = time_expanded * noise + (1 - time_expanded) * actions
         u_t = noise - actions
 
-        if self.with_value_head:
-            action_advantage = None  # * Not using action advantage for value learning and prediction.
-        else:
-            action_advantage = getattr(obs_full, "action_advantage", None)
 
-        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks, 
-                                                                            action_advantage=action_advantage)  # * custom
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks,)  # * custom
         
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, time)
         if (
@@ -801,42 +628,25 @@ class PI0Pytorch_Custom(PI0Pytorch):
 
         loss_aux_dict = {}
 
-        if self.with_value_head:
-            # Get the state token's final representation
-            deep_rep = suffix_out_full[:, 0, :].to(dtype=torch.float32)
-            value_pred = self.value_head(deep_rep) # Shape: (B, 1)
-            
-            # Prepare value target (episode progress)
-            # tgt_frame_index = obs_full.frame_index.float() 
-            
-            # episode_length = obs_full.episode_length.float()
-            # # Avoid division by zero for episodes of length 0
-            # episode_length = torch.where(episode_length > 0, episode_length, torch.ones_like(episode_length))
-            
-            # if not self.timestep_difference_mode:
-            #     progress_tgt = torch.clamp(tgt_frame_index / episode_length, 0.0, 1.0)
-            # else:
-            #     progress_tgt = torch.clamp(tgt_frame_index / episode_length, -1.0, 1.0)  # * tgt_frame_index already processed, might be negative
-            if self.timestep_difference_mode:
-                progress_tgt = torch.clamp(obs_full.progress.float(), -1.0, 1.0)
-            else:
-                progress_tgt = torch.clamp(obs_full.progress.float(), 0.0, 1.0)
-            progress_tgt = progress_tgt.unsqueeze(1) # Shape: (B, 1)
+        # * Custom: value head
+        # Get the state token's final representation
+        deep_rep = suffix_out_full[:, 0, :].to(dtype=torch.float32)
+        value_pred = self.value_head(deep_rep) # Shape: (B, 1)
+        # custom: timestep_difference_mode:
+        progress_tgt = torch.clamp(obs_full.progress.float(), -1.0, 1.0)
+        
+        progress_tgt = progress_tgt.unsqueeze(1) # Shape: (B, 1)
 
-            # Calculate value loss
-            if self.loss_value_use_bce:
-                value_loss = F.binary_cross_entropy_with_logits(value_pred, progress_tgt, reduction="none")
-            else:
-                value_loss = F.mse_loss(value_pred, progress_tgt, reduction="none")
-            
-            # Weight the value loss
-            value_loss = value_loss.to(loss.dtype) * self.loss_value_weight
+        value_loss = F.mse_loss(value_pred, progress_tgt, reduction="none")
+        
+        # Weight the value loss
+        value_loss = value_loss.to(loss.dtype) * self.loss_value_weight
 
-            # Populate auxiliary dictionary for logging
-            loss_aux_dict["loss_action"] = loss_action.detach().mean()
-            loss_aux_dict["loss_value"] = value_loss.detach().mean()
+        # Populate auxiliary dictionary for logging
+        loss_aux_dict["loss_action"] = loss_action.detach().mean()
+        loss_aux_dict["loss_value"] = value_loss.detach().mean()
 
-            loss = loss + value_loss
+        loss = loss + value_loss
 
         if return_loss_dict:
             return loss, loss_aux_dict
@@ -844,127 +654,6 @@ class PI0Pytorch_Custom(PI0Pytorch):
         return loss
 
         # --- End of Modifications ---
-
-    @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10, 
-                    #    cfg_scale=1.
-                       ) -> Tensor:
-        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
-
-        # TODO: batch: first half is conditional, second half is unconditional
-        bsize = observation.state.shape[0]
-        # * for inference, bsize by default is 1.
-        cfg_scale = self.cfg_scale
-
-        if cfg_scale > 1:
-            assert bsize % 2 == 0, "Batch size must be even when using CFG." 
-            cfg_bsize = bsize // 2
-
-        def expand_batch(tensor):
-            if tensor is None:
-                return None
-            if isinstance(tensor, list):
-                return [torch.cat([t, t], dim=0) for t in tensor]
-            # Handle Observation object fields (only those needed for embedding)
-            return torch.cat([tensor, tensor], dim=0)
-
-        if cfg_scale == 1.:
-            if noise is None:
-                actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
-                noise = self.sample_noise(actions_shape, device)
-        elif cfg_scale > 1.:
-            if noise is None:
-                actions_shape = (cfg_bsize, self.config.action_horizon, self.config.action_dim)
-                noise = self.sample_noise(actions_shape, device)
-
-                # * batch: first half is conditional, second half is unconditional
-                noise = expand_batch(noise)  # * repeat
-        else:
-            raise NotImplementedError("CFG scale less than 1 is not implemented.")
-
-        # * cfg_scale 1 means no CFG, normal conditional denoising process, used in policy inference only.
-        # How to do it --> change one sample to a batch of two samples.
-
-        images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
-
-        action_advantage = getattr(observation, "action_advantage", None)
-
-        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks,
-                                                                            
-                                                                            action_advantage=action_advantage)
-        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
-        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
-
-        # Compute image and language key value cache
-        prefix_att_2d_masks_4d = self._prepare_attention_masks_4d(prefix_att_2d_masks)
-        self.paligemma_with_expert.paligemma.language_model.config._attn_implementation = "eager"  # noqa: SLF001
-
-        _, past_key_values = self.paligemma_with_expert.forward(
-            attention_mask=prefix_att_2d_masks_4d,
-            position_ids=prefix_position_ids,
-            past_key_values=None,
-            inputs_embeds=[prefix_embs, None],
-            use_cache=True,
-        )
-
-        dt = -1.0 / num_steps
-        dt = torch.tensor(dt, dtype=torch.float32, device=device)
-
-        x_t = noise
-        time = torch.tensor(1.0, dtype=torch.float32, device=device)
-        while time >= -dt / 2:
-            expanded_time = time.expand(bsize)
-
-            if cfg_scale == 1.:
-                # * NO CFG
-                v_t = self.denoise_step(
-                    state,
-                    prefix_pad_masks,
-                    past_key_values,
-                    x_t,
-                    expanded_time,
-                )
-
-                # Euler step - use new tensor assignment instead of in-place operation
-                x_t = x_t + dt * v_t
-            elif cfg_scale > 1.:
-                # * CFG
-                v_t_full = self.denoise_step(
-                    state,
-                    prefix_pad_masks,
-                    past_key_values,
-                    x_t,
-                    expanded_time,
-                )
-
-                v_t_cond = v_t_full[:cfg_bsize]
-                v_t_uncond = v_t_full[cfg_bsize:]
-
-                # TODO: check the difference between v_t_cond and v_t_uncond
-                # print("v_t_cond mean:", v_t_cond.mean().item(), "std:", v_t_cond.std().item())
-                # print("v_t_uncond mean:", v_t_uncond.mean().item(), "std:", v_t_uncond.std().item())
-                # breakpoint
-
-                v_t = v_t_cond + ((self.cfg_scale - 1) * (v_t_cond - v_t_uncond))
-                
-                x_t_cond = x_t[:cfg_bsize]
-                x_t_cond = x_t_cond + dt * v_t
-                x_t = expand_batch(x_t_cond)  # * repeat to next iter.
-                
-                # print("x_t.shape:", x_t.shape)
-                # print("x_t_cond.shape:", x_t_cond.shape)
-                # raise NotImplementedError
-
-            else:
-                raise NotImplementedError("CFG scale less than 1 is not implemented.")
-
-            time += dt
-
-        if cfg_scale > 1.:
-            # * return action only by removing uncond part.
-            x_t = x_t[:cfg_bsize]
-        
-        return x_t
 
     @torch.no_grad()
     def sample_values(self, device, observation) -> Tensor:
@@ -1013,12 +702,5 @@ class PI0Pytorch_Custom(PI0Pytorch):
         deep_rep = suffix_out[:, 0, :].to(dtype=torch.float32)
 
         value_pred = self.value_head(deep_rep)
-
-        # Apply sigmoid if using BCE loss, as the head doesn't have a final activation in that case
-        if self.loss_value_use_bce:
-            value_pred = torch.sigmoid(value_pred)
-
-
-        # breakpoint()
             
         return value_pred
