@@ -343,8 +343,6 @@ def preprocess_observation_pytorch_custom(
             tokenized_prompt_mask=observation.tokenized_prompt_mask,
             token_ar_mask=observation.token_ar_mask,
             token_loss_mask=observation.token_loss_mask,
-            action_advantage=observation.action_advantage,
-            action_advantage_original=observation.action_advantage_original,
             frame_index=observation.frame_index,
             episode_length=observation.episode_length,
             image_original=observation.image_original,
