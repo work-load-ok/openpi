@@ -329,10 +329,10 @@ We will collect common issues and their solutions here. If you encounter an issu
 ## Change default download path
 the default download dir is ~/.cache/openpi, if you want to change it, please set 
 ```
-export _OPENPI_DATA_HOME="/path/to/your/own/dir" # in linux
+export OPENPI_DATA_HOME="/path/to/your/own/dir" # in linux
 ```
 or
 ```
 import os
-os.env['_OPENPI_DATA_HOME'] = "/path/to/your/own/dir"
+os.env['OPENPI_DATA_HOME'] = "/path/to/your/own/dir"
 ```
