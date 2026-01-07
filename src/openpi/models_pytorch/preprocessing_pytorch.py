@@ -219,12 +219,12 @@ def preprocess_observation_pytorch_custom(
             logger.info(f"Resizing image {key} from {image.shape[1:3]} to {image_resolution}")
             image = image_tools.resize_with_pad_torch(image, *image_resolution)
 
-        if train:
+        if train and apply_aug:
             # Convert from [-1, 1] to [0, 1] for PyTorch augmentations
             image = image / 2.0 + 0.5
 
             # Apply PyTorch-based augmentations
-            if "wrist" not in key and apply_aug:
+            if "wrist" not in key:
                 # Geometric augmentations for non-wrist cameras
                 height, width = image.shape[1:3]
 
@@ -287,31 +287,30 @@ def preprocess_observation_pytorch_custom(
                     ).permute(0, 2, 3, 1)  # [b, c, h, w] -> [b, h, w, c]
 
             
-            if apply_aug:
-                # Color augmentations for all cameras
-                # Random brightness
-                # Use tensor operations instead of .item() for torch.compile compatibility
-                brightness_factor = 0.7 + torch.rand(1, device=image.device) * 0.6  # Random factor between 0.7 and 1.3
-                image = image * brightness_factor
+            # Color augmentations for all cameras
+            # Random brightness
+            # Use tensor operations instead of .item() for torch.compile compatibility
+            brightness_factor = 0.7 + torch.rand(1, device=image.device) * 0.6  # Random factor between 0.7 and 1.3
+            image = image * brightness_factor
 
-                # Random contrast
-                # Use tensor operations instead of .item() for torch.compile compatibility
-                contrast_factor = 0.6 + torch.rand(1, device=image.device) * 0.8  # Random factor between 0.6 and 1.4
-                mean = image.mean(dim=[1, 2, 3], keepdim=True)
-                image = (image - mean) * contrast_factor + mean
+            # Random contrast
+            # Use tensor operations instead of .item() for torch.compile compatibility
+            contrast_factor = 0.6 + torch.rand(1, device=image.device) * 0.8  # Random factor between 0.6 and 1.4
+            mean = image.mean(dim=[1, 2, 3], keepdim=True)
+            image = (image - mean) * contrast_factor + mean
 
-                # Random saturation (convert to HSV, modify S, convert back)
-                # For simplicity, we'll just apply a random scaling to the color channels
-                # Use tensor operations instead of .item() for torch.compile compatibility
-                saturation_factor = 0.5 + torch.rand(1, device=image.device) * 1.0  # Random factor between 0.5 and 1.5
-                gray = image.mean(dim=-1, keepdim=True)
-                image = gray + (image - gray) * saturation_factor
+            # Random saturation (convert to HSV, modify S, convert back)
+            # For simplicity, we'll just apply a random scaling to the color channels
+            # Use tensor operations instead of .item() for torch.compile compatibility
+            saturation_factor = 0.5 + torch.rand(1, device=image.device) * 1.0  # Random factor between 0.5 and 1.5
+            gray = image.mean(dim=-1, keepdim=True)
+            image = gray + (image - gray) * saturation_factor
 
-                # Clamp values to [0, 1]
-                image = torch.clamp(image, 0, 1)
+            # Clamp values to [0, 1]
+            image = torch.clamp(image, 0, 1)
 
-                # Back to [-1, 1]
-                image = image * 2.0 - 1.0
+            # Back to [-1, 1]
+            image = image * 2.0 - 1.0
 
         # Convert back to [B, C, H, W] format if it was originally channels-first
         if is_channels_first:
