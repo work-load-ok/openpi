@@ -12,23 +12,16 @@ import openpi.shared.download as download
 
 
 class PaligemmaTokenizer:
-    def __init__(self, max_len: int = 48, download_path: str = "gs://big_vision/paligemma_tokenizer.model"):
+    def __init__(self, max_len: int = 48):
         self._max_len = max_len
 
-        path = download.maybe_download(download_path, gs={"token": "anon"})
+        path = download.maybe_download(gs={"token": "anon"})
         with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
-    def tokenize(self, prompt: str, state: np.ndarray | None = None, action_advantage: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    def tokenize(self, prompt: str, state: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
         cleaned_text = prompt.strip().replace("_", " ").replace("\n", " ")
-        if state is not None and action_advantage is not None:
-            # This is the Pi05 format with action quality indicator, where the state is part of the discrete language input.
-            discretized_state = np.digitize(state, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
-            state_str = " ".join(map(str, discretized_state))
-            
-            full_prompt = f"Task: {cleaned_text}, State: {state_str}, Advantage: {action_advantage};\nAction: "
-            tokens = self._tokenizer.encode(full_prompt, add_bos=True)
-        elif state is not None:
+        if state is not None:
             # This is the Pi05 format, where the state is part of the discrete language input.
             discretized_state = np.digitize(state, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
             state_str = " ".join(map(str, discretized_state))
