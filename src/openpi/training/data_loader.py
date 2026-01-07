@@ -131,19 +131,7 @@ def create_torch_dataset(
     data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig, config: _config.TrainConfig = None
 ) -> Dataset:
     """Create a dataset for training."""
-    # 自定义参数，如果config不为空，则使用config中额外定义的参数进行数据处理
-    if config is not None:
-        split= config.split if config.split else 'all'
-        data_kwargs = dict(
-            n_history=config.n_history,
-            with_episode_start=config.with_episode_start,
-            skip_sample_ratio_within_episode=config.skip_sample_ratio_within_episode,
-            timestep_difference_mode=config.timestep_difference_mode,
-            stage_process_mode=config.stage_process_mode,
-        )
-    else:
-        data_kwargs = {}
-        split = 'all'
+    split= config.split if config.split else 'all'
 
     repo_id = data_config.repo_id
     if repo_id is None:
@@ -160,14 +148,11 @@ def create_torch_dataset(
             key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
         },
         video_backend='pyav',
-        **data_kwargs,
     )
     if data_config.prompt_from_task:
         dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
 
     return dataset
-
-
 
 # 根据任务，按比例划分数据集
 def episodes_split_through_task(repo_id: str, split_ratio: float = 0.9, split_type: str = "train", shuffle: bool = False, random_seed: int = 42) -> list[int]:
