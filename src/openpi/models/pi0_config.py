@@ -110,18 +110,8 @@ class Pi0Config(_model.BaseModelConfig):
 
 @dataclasses.dataclass(frozen=True)
 class Pi0Config_Custom(Pi0Config):
-    timestep_difference_mode: bool = False  # * If true, the frame_index input represents the difference between two timesteps.
-    stage_process_mode: bool = False
-
     # * Custom
-    with_value_head: bool = False
     loss_action_weight: float = 1.0
     loss_value_weight: float = 1.0
-    loss_value_use_bce: bool = False  # * Use BCE loss for value head
-
-    p_mask_ego_state: float = 0.0
-    cfg_scale: float = 1.0
-    download_path: str = "gs://big_vision/paligemma_tokenizer.model"
-
 
     
