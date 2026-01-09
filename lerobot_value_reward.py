@@ -135,7 +135,7 @@ def collect_all_rewards(parquet_path: Path, chunk_size: int = 50, advantage_sour
         
     return rewards_by_stage, parquet_files
 
-def update_tasks_jsonl(tasks_path: Path) -> None:
+def update_tasks_jsonl(tasks_path: Path, prompt:str|None=None) -> None:
     """
     Update tasks.jsonl file with reward statistics.
     
@@ -143,9 +143,15 @@ def update_tasks_jsonl(tasks_path: Path) -> None:
         tasks_path: Base directory path containing tasks.jsonl file
     """
     tasks_jsonl_path = tasks_path / "tasks.jsonl"
-    assert tasks_jsonl_path.exists(), f"Tasks.jsonl file not found at {tasks_jsonl_path}"
-    with open(tasks_jsonl_path, 'r') as f:
-        tasks = [json.loads(i) for i in f]
+    if prompt is None:
+        assert tasks_jsonl_path.exists(), f"Tasks.jsonl file not found at {tasks_jsonl_path}"
+        with open(tasks_jsonl_path, 'r') as f:
+            tasks = [json.loads(i) for i in f]
+        task_desc = tasks[0]['task'].strip()
+    else:
+        task_desc = prompt.strip()
+    if not task_desc[-1].isalpha(): # 如果最后一个字符不是字母，则去掉最后一个字符
+        task_desc = task_desc[:-1]
     with open(tasks_jsonl_path, 'w') as f:
         task_desc = tasks[0]['task']
         f.write(json.dumps({
@@ -227,7 +233,7 @@ def update_episode_stats_jsonl(episode_stats_path: Path, rewards: Dict[int, List
         for episode_stat in episode_stats:
             f.write(json.dumps(episode_stat) + '\n')
 
-def update_all_advantage(repo_id:Path, parquet_path:str='data', chunk_size: int = 50, advantage_source: str = "progress", stage_nums: int = 1, positive_rate: float = 30):
+def update_all_advantage(repo_id:Path, parquet_path:str='data', prompt:str='fold the cloth', chunk_size: int = 50, advantage_source: str = "progress", stage_nums: int = 1, positive_rate: float = 30):
     """
     读取repo_id下的所有parquet文件，计算奖励，更新所有parquet文件，更新tasks.jsonl，info.jsonl，episode_stats.jsonl文件
     Args:
@@ -239,7 +245,7 @@ def update_all_advantage(repo_id:Path, parquet_path:str='data', chunk_size: int 
         positive_rate: Positive rate of the task, default is 30%
     """
     rewards_by_stage, parquet_files = collect_all_rewards(repo_id/parquet_path, chunk_size=chunk_size, advantage_source=advantage_source, stage_nums=stage_nums)
-    update_tasks_jsonl(repo_id/'meta')
+    update_tasks_jsonl(repo_id/'meta', prompt)
     update_info_json(repo_id/'meta')
     # 计算阈值点,用于划分advantage: negative和advantage: positive
     threshold_points = compute_threshold_points(rewards_by_stage, positive_rate)
@@ -265,12 +271,13 @@ def build_args():
     parser.add_argument('--advantage_source', type=str, default='absolute_advantage', help='Source of advantage values')
     parser.add_argument('--stage_nums', type=int, default=1, help='Number of stages to divide data into based on stage_progress_gt')
     parser.add_argument('--positive_rate', type=float, default=30, help='Positive rate of the task, default is 30%')
+    parser.add_argument('--prompt', type=str|None, default=None, help='new task description')
     args = parser.parse_args()
     return args
 
 def main():
     args = build_args()
-    repo_id = Path("/cpfs01/user/baidexiang/test_data_40")
+    repo_id = Path("../test_data_40/")
     model_name = "baidx_Test"
     model_cfg = {
         "config_name": 'VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD',
@@ -284,7 +291,7 @@ def main():
     )
 
     dataset_metadata = lerobot_dataset.LeRobotDatasetMetadata(repo_id=repo_id,)
-    for i in tqdm(range(1,2), desc="Evaluating videos"):
+    for i in tqdm([0,1], desc="Evaluating videos"):
         parquet_file = repo_id/dataset_metadata.data_path.format(episode_chunk=i//dataset_metadata.chunks_size,episode_index=i)
         if not parquet_file.exists():
             print(f"Parquet file {parquet_file} not found")
@@ -311,7 +318,8 @@ def main():
             advantages_dict=results
         )
 
-    update_all_advantage(repo_id, parquet_path=f"data_{model_name}", chunk_size=args.chunk_size, advantage_source=args.advantage_source, stage_nums=args.stage_nums, positive_rate=args.positive_rate)
+    update_all_advantage(repo_id, parquet_path=f"data_{model_name}", prompt=args.prompt, chunk_size=args.chunk_size, advantage_source=args.advantage_source, stage_nums=args.stage_nums, positive_rate=args.positive_rate)
 
 if __name__ == "__main__":
     main()
+    # uv run python lerobot_value_reward.py --prompt "Flatten and fold the cloth" --chunk_size 50 --advantage_source absolute_advantage --stage_nums 1 --positive_rate 30
