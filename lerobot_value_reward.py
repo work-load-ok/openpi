@@ -71,8 +71,8 @@ def compute_reward_statistics(rewards: List[float], percentiles: List[int] = lis
             'std': 0.0,
             'min': 0.0,
             'max': 0.0,
-            'percentiles': {p: 0.0 for p in percentiles}
-        }
+            'count': 0
+        },{p: 0.0 for p in percentiles}
     
     rewards_array = np.array(rewards)
     
@@ -84,10 +84,9 @@ def compute_reward_statistics(rewards: List[float], percentiles: List[int] = lis
         'std': [np.std(rewards_array)],
         'min': [np.min(rewards_array)],
         'max': [np.max(rewards_array)],
-        'percentiles': dict(zip(percentiles, percentile_values)),
         'count': [len(rewards_array)]
     }
-    return stats
+    return stats, dict(zip(percentiles, percentile_values)),
 
 def compute_threshold_points(rewards: Dict[int, List[float] | np.ndarray], positive_rate: float = 30) -> float | List[float]:
     """
@@ -153,7 +152,6 @@ def update_tasks_jsonl(tasks_path: Path, prompt:str|None=None) -> None:
     if not task_desc[-1].isalpha(): # 如果最后一个字符不是字母，则去掉最后一个字符
         task_desc = task_desc[:-1]
     with open(tasks_jsonl_path, 'w') as f:
-        task_desc = tasks[0]['task']
         f.write(json.dumps({
             'task_index': 0,
             'task': task_desc+', Advantage: negative',
@@ -228,7 +226,8 @@ def update_episode_stats_jsonl(episode_stats_path: Path, rewards: Dict[int, List
     for episode_stat in episode_stats:
         episode_index = episode_stat['episode_index']
         if rewards.get(episode_index) is not None:
-            episode_stat['stats']['reward'] = compute_reward_statistics(rewards[episode_index])
+            reward, percentiles = compute_reward_statistics(rewards[episode_index])
+            episode_stat['stats']['reward'] = reward
     with open(episode_stats_jsonl_path, 'w') as f:
         for episode_stat in episode_stats:
             f.write(json.dumps(episode_stat) + '\n')
@@ -271,13 +270,13 @@ def build_args():
     parser.add_argument('--advantage_source', type=str, default='absolute_advantage', help='Source of advantage values')
     parser.add_argument('--stage_nums', type=int, default=1, help='Number of stages to divide data into based on stage_progress_gt')
     parser.add_argument('--positive_rate', type=float, default=30, help='Positive rate of the task, default is 30%')
-    parser.add_argument('--prompt', type=str|None, default=None, help='new task description')
+    parser.add_argument('--prompt', type=str, default=None, help='new task description')
     args = parser.parse_args()
     return args
 
 def main():
     args = build_args()
-    repo_id = Path("../test_data_40/")
+    repo_id = Path("/cpfs01/user/baidexiang/test_data_40/")
     model_name = "baidx_Test"
     model_cfg = {
         "config_name": 'VALUE_TORCH_Pi05_KAI_FLATTEN_FOLD',
