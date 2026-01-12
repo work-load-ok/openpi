@@ -174,7 +174,7 @@ class PikaInputs(transforms.DataTransformFn):
                 elif type(action_advantage) is torch.Tensor:
                     action_advantage = action_advantage.detach().clone()
                 else:
-                    NotImplementedError(f"Unsupported type for action_advantage: {type(action_advantage)}")
+                   raise NotImplementedError(f"Unsupported type for action_advantage: {type(action_advantage)}")
                 # except:
                 #     print("Failed to convert action_advantage to torch tensor.")
                 #     print("Error with action_advantage:", action_advantage)
@@ -197,7 +197,7 @@ class PikaInputs(transforms.DataTransformFn):
             elif type(action_advantage_original) is torch.Tensor:
                 action_advantage_original = action_advantage_original.detach().clone()
             else:
-                NotImplementedError(f"Unsupported type for action_advantage_original: {type(action_advantage_original)}")
+                raise NotImplementedError(f"Unsupported type for action_advantage_original: {type(action_advantage_original)}")
             
             inputs["action_advantage_original"] = action_advantage_original
 
