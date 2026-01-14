@@ -86,6 +86,8 @@ def split_lerobot_data(source_path: Path, dst_path: Path, episode_index:list[int
         record_data['episode_index'] = record_data['video'].str.split('_').str[-1].str.split('.').str[0].astype(int)
         record_data = record_data.loc[record_data['episode_index'].isin(episode_index)]
         record_data['episode_index'] = record_data['episode_index'].map(old2new_episode_index)
+        record_data['video'] = record_data['video'].map(lambda x: f"episode_{old2new_episode_index[int(x.split('.')[0].split('_')[-1])]:06d}.mp4")
+        record_data.drop(columns=['episode_index'], inplace=True)
         record_data.to_csv(dst_path/'meta'/record_file, index=False)
     # 更新episodes.jsonl
     with open(source_path/'meta'/'episodes.jsonl', 'r') as f:
