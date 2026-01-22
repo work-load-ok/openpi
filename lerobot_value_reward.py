@@ -253,7 +253,7 @@ def update_all_advantage(repo_id:Path, parquet_path:str='data', prompt:str='fold
         rewards = update_parquet_file(parquet_file, threshold_points, chunk_size=chunk_size, advantage_source=advantage_source)
         episode_index = int(parquet_file.name.split('_')[-1].split('.')[0])
         all_rewards[episode_index] = rewards
-    update_episode_stats_jsonl(repo_id/'meta', rewards_by_stage)
+    update_episode_stats_jsonl(repo_id/'meta', all_rewards)
 #--------------------------------End of update_all_advantage--------------------------------
 ############################################################################################
 #--------------------------------Start of main--------------------------------
@@ -290,7 +290,7 @@ def main():
     )
 
     dataset_metadata = lerobot_dataset.LeRobotDatasetMetadata(repo_id=repo_id,)
-    for i in tqdm([0,1], desc="Evaluating videos"):
+    for i in tqdm(range(dataset_metadata.total_episodes), desc="Evaluating videos"):
         parquet_file = repo_id/dataset_metadata.data_path.format(episode_chunk=i//dataset_metadata.chunks_size,episode_index=i)
         if not parquet_file.exists():
             print(f"Parquet file {parquet_file} not found")
