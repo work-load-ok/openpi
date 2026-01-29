@@ -191,7 +191,7 @@ def main():
                     ckpt_dir=ckpt_dir,
                     num_workers=64,  # 并行线程数，根据CPU核心数调整
                 )
-        dataset_metadata = lerobot_dataset.LerobotDatasetMetadata(repo_id=repo_id,)
+        dataset_metadata = lerobot_dataset.LeRobotDatasetMetadata(repo_id=repo_id,)
         for i in tqdm(range(dataset_metadata.total_episodes), desc="Evaluating videos"):
             parquet_file = repo_id/dataset_metadata.data_path.format(episode_chunk=i//dataset_metadata.chunks_size,episode_index=i)
             if not parquet_file.exists():
